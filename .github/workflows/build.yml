@@ -1,0 +1,34 @@
+name: build
+
+on: [pull_request, push]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 5
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        fetch-depth: 1
+    - run: cargo clippy -- -Dwarnings
+    - run: cargo clippy --tests -- -Dwarnings
+    - run: cargo fmt -- --check
+  test:
+    strategy:
+      matrix:
+        platform: [macos-latest, ubuntu-latest, windows-latest]
+        version: [1.34.0, stable, nightly]
+    runs-on: ${{ matrix.platform }}
+    needs: [build]
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        fetch-depth: 1
+    - run: rustup install ${{ matrix.version }}
+    - run: rustup default ${{ matrix.version }}
+    - run: cargo test
+    - run: cargo test --release

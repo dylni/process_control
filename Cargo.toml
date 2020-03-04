@@ -1,0 +1,20 @@
+[package]
+name = "process_control"
+version = "0.1.0"
+authors = ["dylni"]
+edition = "2018"
+exclude = [".*", "/rustfmt.toml", "/tests"]
+description = """
+Methods for terminating processes without requiring unique access.
+"""
+repository = "https://github.com/dylni/process_control"
+readme = "README.md"
+keywords = ["process", "timeout", "time_out", "kill", "terminate"]
+categories = ["concurrency", "os"]
+license = "MIT OR Apache-2.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["processthreadsapi", "winerror"] }
