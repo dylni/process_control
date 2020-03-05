@@ -61,7 +61,7 @@
 //! [wait-timeout]: https://crates.io/crates/wait-timeout
 
 #![doc(
-    html_root_url = "https://docs.rs/process_control/0.1.0",
+    html_root_url = "https://docs.rs/process_control/0.2.0",
     test(attr(deny(warnings)))
 )]
 
