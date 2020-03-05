@@ -21,7 +21,7 @@ fn assert_terminated(mut process: Child) -> IoResult<()> {
         Some(::libc::SIGKILL),
         ::std::os::unix::process::ExitStatusExt::signal(&exit_status),
     );
-    if cfg!(target_os = "windows") {
+    if cfg!(windows) {
         assert_eq!(Some(1), exit_status.code());
     }
 
