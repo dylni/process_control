@@ -67,7 +67,6 @@
 
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
-use std::panic;
 use std::process::Child;
 use std::process::ExitStatus;
 use std::process::Output;
@@ -174,20 +173,12 @@ where
     let process_terminator = process.terminator();
 
     let (result_sender, result_receiver) = mpsc::channel();
-    let timeout_thread = ThreadBuilder::new()
+    ThreadBuilder::new()
         .spawn(move || result_sender.send(get_result_fn(process)))?;
 
     let result = result_receiver.recv_timeout(time_limit).ok();
     // Errors terminating a process are less important than the result.
     let _ = process_terminator.terminate();
-
-    let send_result = timeout_thread
-        .join()
-        .unwrap_or_else(|x| panic::resume_unwind(x));
-    // The result being sent is irrelevant when the process times out.
-    if cfg!(debug_assertions) && result.is_some() {
-        send_result.expect("successful result sending reported failure");
-    }
 
     Ok(result)
 }
