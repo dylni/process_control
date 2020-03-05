@@ -65,8 +65,6 @@
     test(attr(deny(warnings)))
 )]
 
-use std::convert::TryFrom;
-use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
 use std::panic;
@@ -77,16 +75,20 @@ use std::sync::mpsc;
 use std::thread::Builder as ThreadBuilder;
 use std::time::Duration;
 
+#[cfg(unix)]
+#[path = "unix.rs"]
+mod imp;
+#[cfg(windows)]
+#[path = "windows.rs"]
+mod imp;
+
 /// A wrapper that stores enough information to terminate a process.
 ///
 /// Instances can only be constructed using [`Terminator::terminator`].
 ///
 /// [`Terminator::terminator`]: trait.Terminator.html#tymethod.terminator
 #[derive(Debug)]
-pub struct ProcessTerminator(
-    #[cfg(unix)] i32,
-    #[cfg(windows)] ::std::os::windows::io::RawHandle,
-);
+pub struct ProcessTerminator(imp::Process);
 
 impl ProcessTerminator {
     /// Terminates a process as immediately as the operating system allows.
@@ -139,57 +141,7 @@ impl ProcessTerminator {
     /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
     #[inline]
     pub fn terminate(&self) -> IoResult<()> {
-        #[cfg(unix)]
-        {
-            use libc::kill;
-            use libc::ESRCH;
-            use libc::SIGKILL;
-
-            if unsafe { kill(self.0, SIGKILL) } == 0 {
-                return Ok(());
-            }
-
-            let mut error = IoError::last_os_error();
-            if let Some(error_code) = error.raw_os_error() {
-                error = match error_code {
-                    0 => panic!("successful termination reported failure"),
-                    ESRCH => {
-                        IoError::new(IoErrorKind::NotFound, "No such process")
-                    }
-                    _ => error,
-                };
-            }
-            Err(error)
-        }
-        #[cfg(windows)]
-        {
-            use winapi::shared::minwindef::DWORD;
-            use winapi::shared::winerror::ERROR_INVALID_HANDLE;
-            use winapi::shared::winerror::ERROR_SUCCESS;
-            use winapi::um::processthreadsapi::TerminateProcess;
-            use winapi::um::winnt::HANDLE;
-
-            if unsafe { TerminateProcess(self.0 as HANDLE, 1) } != 0 {
-                return Ok(());
-            }
-
-            let mut error = IoError::last_os_error();
-            if let Some(error_code) =
-                error.raw_os_error().and_then(|x| DWORD::try_from(x).ok())
-            {
-                error = match error_code {
-                    ERROR_SUCCESS => {
-                        panic!("successful termination reported failure");
-                    }
-                    ERROR_INVALID_HANDLE => IoError::new(
-                        IoErrorKind::NotFound,
-                        "The handle is invalid.",
-                    ),
-                    _ => error,
-                };
-            }
-            Err(error)
-        }
+        self.0.terminate()
     }
 
     /// Terminates a process as immediately as the operating system allows,
@@ -326,12 +278,7 @@ pub trait Terminator: private::Sealed {
 impl Terminator for Child {
     #[inline]
     fn terminator(&self) -> ProcessTerminator {
-        ProcessTerminator(
-            #[cfg(unix)]
-            i32::try_from(self.id()).expect("returned process id is invalid"),
-            #[cfg(windows)]
-            ::std::os::windows::io::AsRawHandle::as_raw_handle(self),
-        )
+        ProcessTerminator(imp::Process::new(self))
     }
 
     #[inline]
