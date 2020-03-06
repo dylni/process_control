@@ -57,11 +57,11 @@
 //! [`ProcessTerminator::terminate`]: struct.ProcessTerminator.html#method.terminate
 //! [`Receiver::recv_timeout`]: https://doc.rust-lang.org/std/sync/mpsc/struct.Receiver.html#method.recv_timeout
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
-//! [`Terminator::wait_for_output_with_timeout`]: trait.Terminator.html#tymethod.wait_with_timeout
+//! [`Terminator::wait_for_output_with_timeout`]: trait.Terminator.html#tymethod.wait_for_output_with_timeout
 //! [wait-timeout]: https://crates.io/crates/wait-timeout
 
 #![doc(
-    html_root_url = "https://docs.rs/process_control/0.2.0",
+    html_root_url = "https://docs.rs/process_control/*",
     test(attr(deny(warnings)))
 )]
 
@@ -189,7 +189,7 @@ where
 ///
 /// [module]: index.html
 /// [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
-pub trait Terminator: private::Sealed {
+pub trait Terminator: private::Sealed + Sized {
     /// Creates an instance of [`ProcessTerminator`] for this process.
     ///
     /// # Examples
@@ -251,7 +251,7 @@ pub trait Terminator: private::Sealed {
     fn wait_with_timeout(
         self,
         time_limit: Duration,
-    ) -> IoResult<Option<(ExitStatus, Child)>>;
+    ) -> IoResult<Option<(ExitStatus, Self)>>;
 
     /// A convenience method for calling [`Child::wait_with_output`] with a
     /// timeout.
@@ -276,7 +276,7 @@ impl Terminator for Child {
     fn wait_with_timeout(
         self,
         time_limit: Duration,
-    ) -> IoResult<Option<(ExitStatus, Child)>> {
+    ) -> IoResult<Option<(ExitStatus, Self)>> {
         run_with_timeout(self, time_limit, |mut x| (x.wait(), x))?
             .map(|(exit_status, process)| exit_status.map(|x| (x, process)))
             .transpose()

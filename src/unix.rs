@@ -1,27 +1,28 @@
-use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
-use std::panic;
 use std::process::Child;
 
-use libc::kill;
+use libc::pid_t;
 use libc::ESRCH;
 use libc::SIGKILL;
 
 #[derive(Debug)]
-pub(crate) struct Process(i32);
+pub(crate) struct Process(pid_t);
 
 impl Process {
     pub(crate) fn new(process: &Child) -> Self {
         Self(
-            i32::try_from(process.id())
-                .expect("returned process id is invalid"),
+            process
+                .id()
+                .try_into()
+                .expect("returned process identifier is invalid"),
         )
     }
 
     pub(crate) fn terminate(&self) -> IoResult<()> {
-        if unsafe { kill(self.0, SIGKILL) } == 0 {
+        if unsafe { libc::kill(self.0, SIGKILL) } == 0 {
             return Ok(());
         }
 

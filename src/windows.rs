@@ -4,7 +4,6 @@ use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::io::RawHandle;
-use std::panic;
 use std::process::Child;
 
 use winapi::shared::minwindef::DWORD;

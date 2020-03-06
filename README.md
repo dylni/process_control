@@ -44,6 +44,6 @@ in this crate, as defined in [LICENSE-APACHE], shall be licensed according to
 [COPYRIGHT]: https://github.com/dylni/process_control/blob/master/COPYRIGHT
 [documentation]: https://docs.rs/process_control
 [LICENSE-APACHE]: https://github.com/dylni/process_control/blob/master/LICENSE-APACHE
-[`ProcessTerminator::terminate`]: https://docs.rs/process_control/0.2.0/process_control/struct.ProcessTerminator.html#method.terminate
+[`ProcessTerminator::terminate`]: https://docs.rs/process_control/*/process_control/struct.ProcessTerminator.html#method.terminate
 [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
-[`Terminator::wait_for_output_with_timeout`]: https://docs.rs/process_control/0.2.0/process_control/trait.Terminator.html#tymethod.wait_with_timeout
+[`Terminator::wait_for_output_with_timeout`]: https://docs.rs/process_control/*/process_control/trait.Terminator.html#tymethod.wait_for_output_with_timeout
