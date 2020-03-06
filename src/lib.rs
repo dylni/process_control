@@ -1,14 +1,14 @@
-//! This crate allows terminating a process without a mutable reference. Thus,
-//! it becomes possible to abort early from waiting for output or an exit code
-//! – primarily through [`ProcessTerminator::terminate`]. That method is
-//! intentionally designed to not require a reference of any kind to the
-//! [`Child`] instance, to allow for maximal flexibility.
+//! This crate allows terminating a process without a mutable reference.
+//! [`ProcessTerminator::terminate`] is designed to operate in this manner and
+//! is the reason this crate exists. It intentionally does not require a
+//! reference of any kind to the [`Child`] instance, allowing for maximal
+//! flexibility in working with processes.
 //!
 //! Typically, it is not possible to terminate a process during a call to
 //! [`Child::wait`] or [`Child::wait_with_output`] in another thread, since
 //! [`Child::kill`] takes a mutable reference. However, since this crate
-//! creates its own termination method, there is no issue, and useful methods
-//! such as [`Terminator::wait_for_output_with_timeout`] can exist.
+//! creates its own termination method, there is no issue, allowing cleanup
+//! after calling methods such as [`Terminator::wait_for_output_with_timeout`].
 //!
 //! Crate [wait-timeout] has a similar purpose, but it does not provide the
 //! same flexibility. It does not allow reading the entire output of a process
@@ -92,10 +92,6 @@ pub struct ProcessTerminator(imp::Process);
 impl ProcessTerminator {
     /// Terminates a process as immediately as the operating system allows.
     ///
-    /// This method powers the entire crate. All other methods are possible to
-    /// implement using this method, since it does not require a reference to
-    /// the [`Child`] instance for the process.
-    ///
     /// Behavior should be equivalent to calling [`Child::kill`] for the same
     /// process. The guarantees on the result of that method are also
     /// maintained; different [`ErrorKind`] variants may be returned in the
@@ -134,7 +130,6 @@ impl ProcessTerminator {
     /// # }
     /// ```
     ///
-    /// [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
     /// [`Child::kill`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.kill
     /// [`Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
@@ -162,25 +157,18 @@ impl ProcessTerminator {
 }
 
 fn run_with_timeout<TGetResultFn, TResult>(
-    process: Child,
-    time_limit: Duration,
     get_result_fn: TGetResultFn,
+    time_limit: Duration,
 ) -> IoResult<Option<TResult>>
 where
-    TGetResultFn: 'static + FnOnce(Child) -> TResult + Send,
+    TGetResultFn: 'static + FnOnce() -> TResult + Send,
     TResult: 'static + Send,
 {
-    let process_terminator = process.terminator();
-
     let (result_sender, result_receiver) = mpsc::channel();
-    ThreadBuilder::new()
-        .spawn(move || result_sender.send(get_result_fn(process)))?;
+    let _ = ThreadBuilder::new()
+        .spawn(move || result_sender.send(get_result_fn()))?;
 
-    let result = result_receiver.recv_timeout(time_limit).ok();
-    // Errors terminating a process are less important than the result.
-    let _ = process_terminator.terminate();
-
-    Ok(result)
+    Ok(result_receiver.recv_timeout(time_limit).ok())
 }
 
 /// Extensions to [`Child`] for easily killing processes.
@@ -214,16 +202,30 @@ pub trait Terminator: private::Sealed + Sized {
 
     /// A convenience method for calling [`Child::wait`] with a timeout.
     ///
-    /// If the time limit expires before that method returns,
-    /// [`ProcessTerminator::terminate`] will be called in another thread,
-    /// without waiting for the process to finish. `Ok(None)` will be returned
-    /// in that case.
-    ///
     /// As the `Child` must be consumed by this method, it is returned if the
     /// process finishes. The instance would be required to subsequently access
-    /// [`Child::stdout`] or other fields. That pattern is unique to this
-    /// method; [`wait_for_output_with_timeout`] captures all output, so the
-    /// instance should be unnecessary afterward.
+    /// [`Child::stdout`] or other fields.
+    ///
+    /// For more information, see [`wait_for_output_with_timeout`].
+    ///
+    /// [`Child::stdout`]: https://doc.rust-lang.org/std/process/struct.Child.html#structfield.stdout
+    /// [`Child::wait`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait
+    /// [`wait_for_output_with_timeout`]: #tymethod.wait_for_output_with_timeout
+    fn wait_with_timeout(
+        self,
+        time_limit: Duration,
+    ) -> IoResult<Option<(ExitStatus, Self)>>;
+
+    /// A convenience method for calling [`Child::wait_with_output`] with a
+    /// timeout.
+    ///
+    /// If the time limit expires before that method finishes, `Ok(None)` will
+    /// be returned. The process will not be terminated, so it may be desirable
+    /// to call [`ProcessTerminator::terminate_if_necessary`] afterward to free
+    /// system resources.
+    ///
+    /// This method will create a separate thread to run the method without
+    /// blocking the current thread.
     ///
     /// # Examples
     ///
@@ -236,30 +238,22 @@ pub trait Terminator: private::Sealed + Sized {
     ///
     /// # fn main() -> IoResult<()> {
     /// let process = Command::new("echo").spawn()?;
-    /// match process.wait_with_timeout(Duration::from_secs(1))? {
-    ///     Some((exit_status, _)) => assert!(exit_status.success()),
+    /// let process_terminator = process.terminator();
+    ///
+    /// let result =
+    ///     process.wait_for_output_with_timeout(Duration::from_secs(1))?;
+    /// process_terminator.terminate_if_necessary()?;
+    ///
+    /// match result {
+    ///     Some(output) => assert!(output.status.success()),
     ///     None => panic!("process timed out"),
     /// }
     /// #     Ok(())
     /// # }
     /// ```
     ///
-    /// [`Child::stdout`]: https://doc.rust-lang.org/std/process/struct.Child.html#structfield.stdout
-    /// [`Child::wait`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait
-    /// [`ProcessTerminator::terminate`]: struct.ProcessTerminator.html#method.terminate
-    /// [`wait_for_output_with_timeout`]: #tymethod.wait_for_output_with_timeout
-    fn wait_with_timeout(
-        self,
-        time_limit: Duration,
-    ) -> IoResult<Option<(ExitStatus, Self)>>;
-
-    /// A convenience method for calling [`Child::wait_with_output`] with a
-    /// timeout.
-    ///
-    /// For more information, see [`wait_with_timeout`].
-    ///
     /// [`Child::wait_with_output`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait_with_output
-    /// [`wait_with_timeout`]: #tymethod.wait_with_timeout
+    /// [`ProcessTerminator::terminate_if_necessary`]: struct.ProcessTerminator.html#method.terminate_if_necessary
     fn wait_for_output_with_timeout(
         self,
         time_limit: Duration,
@@ -274,10 +268,10 @@ impl Terminator for Child {
 
     #[inline]
     fn wait_with_timeout(
-        self,
+        mut self,
         time_limit: Duration,
     ) -> IoResult<Option<(ExitStatus, Self)>> {
-        run_with_timeout(self, time_limit, |mut x| (x.wait(), x))?
+        run_with_timeout(|| (self.wait(), self), time_limit)?
             .map(|(exit_status, process)| exit_status.map(|x| (x, process)))
             .transpose()
     }
@@ -287,7 +281,7 @@ impl Terminator for Child {
         self,
         time_limit: Duration,
     ) -> IoResult<Option<Output>> {
-        run_with_timeout(self, time_limit, Self::wait_with_output)?.transpose()
+        run_with_timeout(|| self.wait_with_output(), time_limit)?.transpose()
     }
 }
 

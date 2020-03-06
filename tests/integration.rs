@@ -88,6 +88,8 @@ fn test_wait_with_timeout_expired() -> IoResult<()> {
     let process_terminator = process.terminator();
 
     assert_eq!(None, process.wait_with_timeout(ONE_SECOND)?.map(|(x, _)| x));
+    process_terminator.terminate()?;
+
     thread::sleep(ONE_SECOND);
     assert_not_found(&process_terminator);
 
@@ -112,6 +114,8 @@ fn test_wait_for_output_with_timeout_expired() -> IoResult<()> {
     let process_terminator = process.terminator();
 
     assert_eq!(None, process.wait_for_output_with_timeout(ONE_SECOND)?);
+    process_terminator.terminate()?;
+
     thread::sleep(ONE_SECOND);
     assert_not_found(&process_terminator);
 

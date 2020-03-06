@@ -1,16 +1,16 @@
 # Process Control
 
-This crate allows terminating a process without a mutable reference. Thus, it
-becomes possible to abort early from waiting for output or an exit code –
-primarily through [`ProcessTerminator::terminate`]. That method is
-intentionally designed to not require a reference of any kind to the [`Child`]
-instance, to allow for maximal flexibility.
+This crate allows terminating a process without a mutable reference.
+[`ProcessTerminator::terminate`] is designed to operate in this manner and is
+the reason this crate exists. It intentionally does not require a reference of
+any kind to the [`Child`] instance, allowing for maximal flexibility in working
+with processes.
 
 Typically, it is not possible to terminate a process during a call to
 [`Child::wait`] or [`Child::wait_with_output`] in another thread, since
 [`Child::kill`] takes a mutable reference. However, since this crate creates
-its own termination method, there is no issue, and useful methods such as
-[`Terminator::wait_for_output_with_timeout`] can exist.
+its own termination method, there is no issue, allowing cleanup after calling
+methods such as [`Terminator::wait_for_output_with_timeout`].
 
 [![GitHub Build Status](https://github.com/dylni/process_control/workflows/build/badge.svg?branch=master)](https://github.com/dylni/process_control/actions?query=branch%3Amaster)
 
