@@ -5,8 +5,8 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
+use process_control::ChildExt;
 use process_control::ProcessTerminator;
-use process_control::Terminator;
 
 const ONE_SECOND: Duration = Duration::from_secs(1);
 
@@ -65,43 +65,47 @@ fn test_terminate_if_necessary() -> IoResult<()> {
     process_terminator.terminate_if_necessary()?;
     assert_terminated(process)?;
 
-    process_terminator.terminate_if_necessary()?;
-
-    Ok(())
+    process_terminator.terminate_if_necessary()
 }
 
 #[test]
 fn test_wait_with_timeout() -> IoResult<()> {
-    let process = create_process(Some(ONE_SECOND))?;
+    let mut process = create_process(Some(ONE_SECOND))?;
+    let process_terminator = process.terminator();
+
     assert_eq!(
         Some(Some(0)),
-        process
-            .wait_with_timeout(FIVE_SECONDS)?
-            .map(|(x, _)| x.code()),
+        process.with_timeout(FIVE_SECONDS).wait()?.map(|x| x.code()),
     );
+    assert_not_found(&process_terminator);
+
     Ok(())
 }
 
 #[test]
 fn test_wait_with_timeout_expired() -> IoResult<()> {
-    let process = create_process(None)?;
+    let mut process = create_process(None)?;
     let process_terminator = process.terminator();
 
-    assert_eq!(None, process.wait_with_timeout(ONE_SECOND)?.map(|(x, _)| x));
-    process_terminator.terminate()?;
-
-    Ok(())
+    assert_eq!(None, process.with_timeout(ONE_SECOND).wait()?);
+    thread::sleep(ONE_SECOND);
+    process_terminator.terminate()
 }
 
 #[test]
 fn test_wait_for_output_with_timeout() -> IoResult<()> {
     let process = create_process(Some(ONE_SECOND))?;
+    let process_terminator = process.terminator();
+
     assert_eq!(
         Some(Some(0)),
         process
-            .wait_for_output_with_timeout(FIVE_SECONDS)?
+            .with_output_timeout(FIVE_SECONDS)
+            .wait()?
             .map(|x| x.status.code()),
     );
+    assert_not_found(&process_terminator);
+
     Ok(())
 }
 
@@ -110,35 +114,35 @@ fn test_wait_for_output_with_timeout_expired() -> IoResult<()> {
     let process = create_process(None)?;
     let process_terminator = process.terminator();
 
-    assert_eq!(None, process.wait_for_output_with_timeout(ONE_SECOND)?);
-    process_terminator.terminate()?;
-
-    Ok(())
+    assert_eq!(None, process.with_output_timeout(ONE_SECOND).wait()?);
+    thread::sleep(ONE_SECOND);
+    process_terminator.terminate()
 }
 
 #[test]
 fn test_wait_with_terminating_timeout() -> IoResult<()> {
-    let process = create_process(Some(ONE_SECOND))?;
+    let mut process = create_process(Some(ONE_SECOND))?;
+    let process_terminator = process.terminator();
+
     assert_eq!(
         Some(Some(0)),
         process
-            .wait_with_terminating_timeout(FIVE_SECONDS)?
-            .map(|(x, _)| x.code()),
+            .with_timeout(FIVE_SECONDS)
+            .terminating()
+            .wait()?
+            .map(|x| x.code()),
     );
+    assert_not_found(&process_terminator);
+
     Ok(())
 }
 
 #[test]
 fn test_wait_with_terminating_timeout_expired() -> IoResult<()> {
-    let process = create_process(None)?;
+    let mut process = create_process(None)?;
     let process_terminator = process.terminator();
 
-    assert_eq!(
-        None,
-        process
-            .wait_with_terminating_timeout(ONE_SECOND)?
-            .map(|(x, _)| x),
-    );
+    assert_eq!(None, process.with_timeout(ONE_SECOND).terminating().wait()?);
     thread::sleep(ONE_SECOND);
     assert_not_found(&process_terminator);
 
@@ -148,12 +152,18 @@ fn test_wait_with_terminating_timeout_expired() -> IoResult<()> {
 #[test]
 fn test_wait_for_output_with_terminating_timeout() -> IoResult<()> {
     let process = create_process(Some(ONE_SECOND))?;
+    let process_terminator = process.terminator();
+
     assert_eq!(
         Some(Some(0)),
         process
-            .wait_for_output_with_terminating_timeout(FIVE_SECONDS)?
+            .with_output_timeout(FIVE_SECONDS)
+            .terminating()
+            .wait()?
             .map(|x| x.status.code()),
     );
+    assert_not_found(&process_terminator);
+
     Ok(())
 }
 
@@ -164,7 +174,10 @@ fn test_wait_for_output_with_terminating_timeout_expired() -> IoResult<()> {
 
     assert_eq!(
         None,
-        process.wait_for_output_with_terminating_timeout(ONE_SECOND)?,
+        process
+            .with_output_timeout(ONE_SECOND)
+            .terminating()
+            .wait()?,
     );
     thread::sleep(ONE_SECOND);
     assert_not_found(&process_terminator);
