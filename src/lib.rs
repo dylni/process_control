@@ -159,139 +159,50 @@ impl ProcessTerminator {
     }
 }
 
-/// Extensions to [`Child`] for easily terminating processes.
-///
-/// For more information, see [the module-level documentation][module].
-///
-/// [module]: index.html
-/// [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
+#[deprecated(since = "0.4.0", note = "use `ChildExt` instead")]
 pub trait Terminator: private::Sealed + Sized {
-    /// Creates an instance of [`ProcessTerminator`] for this process.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use std::io::Result as IoResult;
-    /// use std::process::Command;
-    ///
-    /// use process_control::Terminator;
-    ///
-    /// # fn main() -> IoResult<()> {
-    /// let process = Command::new("echo").spawn()?;
-    /// # #[allow(unused_variables)]
-    /// let process_terminator = process.terminator();
-    /// #     Ok(())
-    /// # }
-    /// ```
-    ///
-    /// [`ProcessTerminator`]: struct.ProcessTerminator.html
+    #[deprecated(since = "0.4.0", note = "use `ChildExt::terminator` instead")]
     #[must_use]
     fn terminator(&self) -> ProcessTerminator;
 
-    /// A convenience method for calling [`Child::wait`] with a timeout.
-    ///
-    /// As the `Child` must be consumed by this method, it is returned if the
-    /// process finishes. The instance would be required to subsequently access
-    /// [`Child::stdout`] or other fields.
-    ///
-    /// For more information, see [`wait_for_output_with_timeout`].
-    ///
-    /// [`Child::stdout`]: https://doc.rust-lang.org/std/process/struct.Child.html#structfield.stdout
-    /// [`Child::wait`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait
-    /// [`wait_for_output_with_timeout`]: #tymethod.wait_for_output_with_timeout
+    #[deprecated(
+        since = "0.4.0",
+        note = "use `ChildExt::with_timeout` instead"
+    )]
     fn wait_with_timeout(
         self,
         time_limit: Duration,
     ) -> IoResult<Option<(ExitStatus, Self)>>;
 
-    /// A convenience method for calling [`Child::wait_with_output`] with a
-    /// timeout.
-    ///
-    /// If the time limit expires before that method finishes, `Ok(None)` will
-    /// be returned. The process will not be terminated, so it may be desirable
-    /// to call [`ProcessTerminator::terminate_if_necessary`] afterward to free
-    /// system resources. [`wait_for_output_with_terminating_timeout`] can be
-    /// used to call that method automatically.
-    ///
-    /// This method will create a separate thread to run the method without
-    /// blocking the current thread.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use std::io::Result as IoResult;
-    /// use std::process::Command;
-    /// use std::time::Duration;
-    ///
-    /// use process_control::Terminator;
-    ///
-    /// # fn main() -> IoResult<()> {
-    /// let process = Command::new("echo").spawn()?;
-    /// let process_terminator = process.terminator();
-    ///
-    /// let result =
-    ///     process.wait_for_output_with_timeout(Duration::from_secs(1))?;
-    /// process_terminator.terminate_if_necessary()?;
-    ///
-    /// match result {
-    ///     Some(output) => assert!(output.status.success()),
-    ///     None => panic!("process timed out"),
-    /// }
-    /// #     Ok(())
-    /// # }
-    /// ```
-    ///
-    /// [`Child::wait_with_output`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait_with_output
-    /// [`ProcessTerminator::terminate_if_necessary`]: struct.ProcessTerminator.html#method.terminate_if_necessary
-    /// [`wait_for_output_with_terminating_timeout`]: #tymethod.wait_for_output_with_terminating_timeout
+    #[deprecated(
+        since = "0.4.0",
+        note = "use `ChildExt::with_output_timeout` instead"
+    )]
     fn wait_for_output_with_timeout(
         self,
         time_limit: Duration,
     ) -> IoResult<Option<Output>>;
 
-    /// A convenience method for calling [`wait_with_timeout`] and terminating
-    /// the process if it exceeds the time limit.
-    ///
-    /// For more information, see [`wait_for_output_with_terminating_timeout`].
-    ///
-    /// [`wait_with_timeout`]: #tymethod.wait_with_timeout
-    /// [`wait_for_output_with_terminating_timeout`]: #tymethod.wait_for_output_with_terminating_timeout
+    #[deprecated(
+        since = "0.4.0",
+        note = "use `ChildExt::with_timeout` instead"
+    )]
     fn wait_with_terminating_timeout(
         self,
         time_limit: Duration,
     ) -> IoResult<Option<(ExitStatus, Self)>>;
 
-    /// A convenience method for calling [`wait_for_output_with_timeout`] and
-    /// terminating the process if it exceeds the time limit.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use std::io::Result as IoResult;
-    /// use std::process::Command;
-    /// use std::time::Duration;
-    ///
-    /// use process_control::Terminator;
-    ///
-    /// # fn main() -> IoResult<()> {
-    /// let process = Command::new("echo").spawn()?;
-    /// match process
-    ///     .wait_for_output_with_terminating_timeout(Duration::from_secs(1))?
-    /// {
-    ///     Some(output) => assert!(output.status.success()),
-    ///     None => panic!("process timed out"),
-    /// }
-    /// #     Ok(())
-    /// # }
-    /// ```
-    ///
-    /// [`wait_for_output_with_timeout`]: #tymethod.wait_for_output_with_timeout
+    #[deprecated(
+        since = "0.4.0",
+        note = "use `ChildExt::with_output_timeout` instead"
+    )]
     fn wait_for_output_with_terminating_timeout(
         self,
         time_limit: Duration,
     ) -> IoResult<Option<Output>>;
 }
 
+#[allow(deprecated)]
 impl Terminator for Child {
     #[inline]
     fn terminator(&self) -> ProcessTerminator {
