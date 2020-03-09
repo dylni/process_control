@@ -67,6 +67,7 @@
     html_root_url = "https://docs.rs/process_control/*",
     test(attr(deny(warnings)))
 )]
+#![warn(unused_results)]
 
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
@@ -313,7 +314,7 @@ macro_rules! r#impl {
             /// [`terminating`]: #method.terminating
             #[inline]
             pub fn wait(mut self) -> IoResult<Option<$return_type>> {
-                self.process.stdin.take();
+                let _ = self.process.stdin.take();
 
                 let terminator = self.terminator.take();
                 let result = $wait_fn(self);
