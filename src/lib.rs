@@ -306,9 +306,15 @@ macro_rules! r#impl {
             /// beforehand. It is recommended to always call that method to
             /// allow system resources to be freed.
             ///
+            /// The stdin handle to the process, if it exists, will be closed
+            /// before waiting. Otherwise, the process would be guaranteed to
+            /// time out.
+            ///
             /// [`terminating`]: #method.terminating
             #[inline]
             pub fn wait(mut self) -> IoResult<Option<$return_type>> {
+                self.process.stdin.take();
+
                 let terminator = self.terminator.take();
                 let result = $wait_fn(self);
                 if let Some(terminator) = terminator {

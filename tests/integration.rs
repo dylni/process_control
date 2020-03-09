@@ -2,6 +2,7 @@ use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
 use std::process::Child;
 use std::process::Command;
+use std::process::Stdio;
 use std::thread;
 use std::time::Duration;
 
@@ -42,6 +43,10 @@ fn create_process(running_time: Option<Duration>) -> IoResult<Child> {
         .arg("--")
         .arg(running_time.unwrap_or(FIVE_SECONDS).as_secs().to_string())
         .spawn()
+}
+
+fn create_stdin_process() -> IoResult<Child> {
+    Command::new("perl").stdin(Stdio::piped()).spawn()
 }
 
 #[test]
@@ -180,6 +185,37 @@ fn test_wait_for_output_with_terminating_timeout_expired() -> IoResult<()> {
             .wait()?,
     );
     thread::sleep(ONE_SECOND);
+    assert_not_found(&process_terminator);
+
+    Ok(())
+}
+
+#[test]
+fn test_wait_with_stdin() -> IoResult<()> {
+    let mut process = create_stdin_process()?;
+    let process_terminator = process.terminator();
+
+    assert_eq!(
+        Some(Some(0)),
+        process.with_timeout(FIVE_SECONDS).wait()?.map(|x| x.code()),
+    );
+    assert_not_found(&process_terminator);
+
+    Ok(())
+}
+
+#[test]
+fn test_wait_for_output_with_stdin() -> IoResult<()> {
+    let process = create_stdin_process()?;
+    let process_terminator = process.terminator();
+
+    assert_eq!(
+        Some(Some(0)),
+        process
+            .with_output_timeout(FIVE_SECONDS)
+            .wait()?
+            .map(|x| x.status.code()),
+    );
     assert_not_found(&process_terminator);
 
     Ok(())
