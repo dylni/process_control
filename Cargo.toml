@@ -5,7 +5,7 @@ authors = ["dylni"]
 edition = "2018"
 exclude = [".*", "/rustfmt.toml", "/tests"]
 description = """
-Methods for terminating processes without requiring unique access.
+Methods for terminating processes without requiring unique access
 """
 repository = "https://github.com/dylni/process_control"
 readme = "README.md"
