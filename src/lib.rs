@@ -60,10 +60,7 @@
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
 //! [wait-timeout]: https://crates.io/crates/wait-timeout
 
-#![doc(
-    html_root_url = "https://docs.rs/process_control/*",
-    test(attr(deny(warnings)))
-)]
+#![doc(html_root_url = "https://docs.rs/process_control/*")]
 #![warn(unused_results)]
 
 use std::fmt::Display;
@@ -176,7 +173,7 @@ impl ExitStatus {
     /// *This method is only available on Unix systems.*
     ///
     /// [`ExitStatusExt::signal`]: https://doc.rust-lang.org/std/os/unix/process/trait.ExitStatusExt.html#tymethod.signal
-    #[cfg(unix)]
+    #[cfg(any(unix, doc))]
     #[inline]
     #[must_use]
     pub fn signal(self) -> Option<c_uint> {

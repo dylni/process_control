@@ -99,6 +99,14 @@ where
 pub(crate) struct Handle(pid_t);
 
 impl Handle {
+    fn check_syscall(result: c_int) -> IoResult<()> {
+        if result >= 0 {
+            Ok(())
+        } else {
+            Err(IoError::last_os_error())
+        }
+    }
+
     pub(crate) fn new(process: &Child) -> IoResult<Self> {
         Ok(Self::inherited(process))
     }
@@ -110,14 +118,6 @@ impl Handle {
                 .try_into()
                 .expect("returned process identifier is invalid"),
         )
-    }
-
-    fn check_syscall(result: c_int) -> IoResult<()> {
-        if result >= 0 {
-            Ok(())
-        } else {
-            Err(IoError::last_os_error())
-        }
     }
 
     pub(crate) unsafe fn terminate(&self) -> IoResult<()> {

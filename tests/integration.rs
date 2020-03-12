@@ -13,28 +13,6 @@ const ONE_SECOND: Duration = Duration::from_secs(1);
 
 const FIVE_SECONDS: Duration = Duration::from_secs(5);
 
-fn assert_terminated(mut process: Child) -> IoResult<()> {
-    assert_eq!(None, process.try_wait()?.and_then(|x| x.code()));
-
-    let exit_status = process.wait()?;
-    #[cfg(unix)]
-    assert_eq!(
-        Some(::libc::SIGKILL),
-        ::std::os::unix::process::ExitStatusExt::signal(&exit_status),
-    );
-    if cfg!(windows) {
-        assert_eq!(Some(1), exit_status.code());
-    }
-
-    Ok(())
-}
-
-fn assert_not_found(terminator: &Terminator) {
-    assert_eq!(Err(IoErrorKind::NotFound), unsafe {
-        terminator.terminate().map_err(|x| x.kind())
-    });
-}
-
 fn create_process(running_time: Option<Duration>) -> IoResult<Child> {
     Command::new("perl")
         .arg("-e")
@@ -48,12 +26,36 @@ fn create_stdin_process() -> IoResult<Child> {
     Command::new("perl").stdin(Stdio::piped()).spawn()
 }
 
+fn assert_terminated(mut process: Child) -> IoResult<()> {
+    let exit_status = process.wait()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+
+        use libc::SIGKILL;
+
+        assert_eq!(Some(SIGKILL), exit_status.signal());
+    }
+    if cfg!(not(unix)) {
+        assert_eq!(Some(1), exit_status.code());
+    }
+    Ok(())
+}
+
+fn assert_not_found(terminator: &Terminator) {
+    assert_eq!(Err(IoErrorKind::NotFound), unsafe {
+        terminator.terminate().map_err(|x| x.kind())
+    });
+}
+
 #[test]
 fn test_terminate() -> IoResult<()> {
-    let process = create_process(None)?;
+    let mut process = create_process(None)?;
     let terminator = process.terminator()?;
 
     unsafe { terminator.terminate()? }
+
+    assert_eq!(None, process.try_wait()?.and_then(|x| x.code()));
     assert_terminated(process)?;
 
     assert_not_found(&terminator);
@@ -159,6 +161,8 @@ fn test_wait_with_terminating_timeout_expired() -> IoResult<()> {
             .wait()?,
     );
     thread::sleep(ONE_SECOND);
+    assert_terminated(process)?;
+
     assert_not_found(&terminator);
 
     Ok(())

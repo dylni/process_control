@@ -73,6 +73,26 @@ pub(crate) struct Handle {
 }
 
 impl Handle {
+    fn get_handle(process: &Child) -> HANDLE {
+        process.as_raw_handle() as HANDLE
+    }
+
+    fn raw_os_error(error: &IoError) -> Option<DWORD> {
+        error.raw_os_error().and_then(|x| x.try_into().ok())
+    }
+
+    fn not_found_error() -> IoError {
+        IoError::new(IoErrorKind::NotFound, "The handle is invalid.")
+    }
+
+    fn check_syscall(result: BOOL) -> IoResult<()> {
+        if result == TRUE {
+            Ok(())
+        } else {
+            Err(IoError::last_os_error())
+        }
+    }
+
     pub(crate) fn new(process: &Child) -> IoResult<Self> {
         let parent_handle = unsafe { GetCurrentProcess() };
         let mut handle = ptr::null_mut();
@@ -97,26 +117,6 @@ impl Handle {
         Self {
             handle: RawHandle(Self::get_handle(process)),
             duplicated: false,
-        }
-    }
-
-    fn get_handle(process: &Child) -> HANDLE {
-        process.as_raw_handle() as HANDLE
-    }
-
-    fn not_found_error() -> IoError {
-        IoError::new(IoErrorKind::NotFound, "The handle is invalid.")
-    }
-
-    fn raw_os_error(error: &IoError) -> Option<DWORD> {
-        error.raw_os_error().and_then(|x| x.try_into().ok())
-    }
-
-    fn check_syscall(result: BOOL) -> IoResult<()> {
-        if result == TRUE {
-            Ok(())
-        } else {
-            Err(IoError::last_os_error())
         }
     }
 
