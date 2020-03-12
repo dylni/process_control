@@ -101,29 +101,27 @@ impl Handle {
 
     fn check_syscall(result: c_int) -> IoResult<()> {
         if result >= 0 {
-            return Ok(());
+            Ok(())
+        } else {
+            Err(IoError::last_os_error())
         }
+    }
 
-        let error = IoError::last_os_error();
-        if let Some(error_code) = error.raw_os_error() {
-            match error_code {
-                0 => panic!("successful system call reported failure"),
+    pub(crate) unsafe fn terminate(&self) -> IoResult<()> {
+        let result = Self::check_syscall(libc::kill(self.0, SIGKILL));
+        if let Err(error) = &result {
+            if let Some(error_code) = error.raw_os_error() {
                 // This error is usually decoded to [ErrorKind::Other]:
                 // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/mod.rs#L100-L123
-                ESRCH => {
+                if error_code == ESRCH {
                     return Err(IoError::new(
                         IoErrorKind::NotFound,
                         "No such process",
                     ));
                 }
-                _ => {}
-            };
+            }
         }
-        Err(error)
-    }
-
-    pub(crate) fn terminate(&self) -> IoResult<()> {
-        Self::check_syscall(unsafe { libc::kill(self.0, SIGKILL) })
+        result
     }
 
     pub(crate) fn wait_with_timeout(

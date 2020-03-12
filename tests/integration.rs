@@ -30,10 +30,9 @@ fn assert_terminated(mut process: Child) -> IoResult<()> {
 }
 
 fn assert_not_found(process_terminator: &ProcessTerminator) {
-    assert_eq!(
-        Err(IoErrorKind::NotFound),
-        process_terminator.terminate().map_err(|x| x.kind()),
-    );
+    assert_eq!(Err(IoErrorKind::NotFound), unsafe {
+        process_terminator.terminate().map_err(|x| x.kind())
+    });
 }
 
 fn create_process(running_time: Option<Duration>) -> IoResult<Child> {
@@ -54,23 +53,12 @@ fn test_terminate() -> IoResult<()> {
     let process = create_process(None)?;
     let process_terminator = process.terminator()?;
 
-    process_terminator.terminate()?;
+    unsafe { process_terminator.terminate()? }
     assert_terminated(process)?;
 
     assert_not_found(&process_terminator);
 
     Ok(())
-}
-
-#[test]
-fn test_terminate_if_necessary() -> IoResult<()> {
-    let process = create_process(None)?;
-    let process_terminator = process.terminator()?;
-
-    process_terminator.terminate_if_necessary()?;
-    assert_terminated(process)?;
-
-    process_terminator.terminate_if_necessary()
 }
 
 #[test]
@@ -94,7 +82,7 @@ fn test_wait_with_timeout_expired() -> IoResult<()> {
 
     assert_eq!(None, process.with_timeout(ONE_SECOND).wait()?);
     thread::sleep(ONE_SECOND);
-    process_terminator.terminate()
+    unsafe { process_terminator.terminate() }
 }
 
 #[test]
@@ -121,7 +109,7 @@ fn test_wait_for_output_with_timeout_expired() -> IoResult<()> {
 
     assert_eq!(None, process.with_output_timeout(ONE_SECOND).wait()?);
     thread::sleep(ONE_SECOND);
-    process_terminator.terminate()
+    unsafe { process_terminator.terminate() }
 }
 
 #[test]

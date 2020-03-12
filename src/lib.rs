@@ -1,27 +1,27 @@
-//! This crate allows terminating a process without a mutable reference.
-//! [`ProcessTerminator::terminate`] is designed to operate in this manner and
-//! is the reason this crate exists. It intentionally does not require a
-//! reference of any kind to the [`Child`] instance, allowing for maximal
-//! flexibility in working with processes.
+//! This crate allows running a process with a timeout, with the option to
+//! terminate it automatically afterward. The latter is surprisingly difficult
+//! to achieve on Unix, since process identifiers can be arbitrarily reassigned
+//! when no longer used. Thus, it would be extremely easy to inadvertently
+//! terminate an unexpected process. This crate protects against that
+//! possibility.
 //!
-//! Typically, it is not possible to terminate a process during a call to
-//! [`Child::wait`] or [`Child::wait_with_output`] in another thread, since
-//! [`Child::kill`] takes a mutable reference. However, since this crate
-//! creates its own termination method, there is no issue, allowing system
-//! resources to be freed when using methods such as
-//! [`ChildExt::with_output_timeout`].
-//!
-//! Crate [wait-timeout] has a similar purpose, but it does not provide the
-//! same flexibility. It does not allow reading the entire output of a process
-//! within the time limit or terminating a process based on other signals. This
-//! crate aims to fill in those gaps and simplify the implementation, now that
-//! [`Receiver::recv_timeout`] exists.
+//! Methods for creating timeouts are available on [`ChildExt`], which is
+//! implemented for [`Child`]. They each return a builder of options to
+//! configure how the timeout should be applied.
 //!
 //! # Implementation
 //!
 //! All traits are [sealed], meaning that they can only be implemented by this
 //! crate. Otherwise, backward compatibility would be more difficult to
 //! maintain for new features.
+//!
+//! # Related Crates
+//!
+//! Crate [wait-timeout] has a similar purpose, but it does not provide the
+//! same functionality. Processes cannot be terminated automatically, and there
+//! is no counterpart to [`Child::wait_with_output`] for simply reading output
+//! from a process with a timeout. This crate aims to fill in those gaps and
+//! simplify the implementation, now that [`Receiver::recv_timeout`] exists.
 //!
 //! # Examples
 //!
@@ -54,11 +54,8 @@
 //! ```
 //!
 //! [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
-//! [`Child::kill`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.kill
-//! [`Child::wait`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait
+//! [`ChildExt`]: trait.ChildExt.html
 //! [`Child::wait_with_output`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait_with_output
-//! [`ChildExt::with_output_timeout`]: trait.ChildExt.html#tymethod.with_output_timeout
-//! [`ProcessTerminator::terminate`]: struct.ProcessTerminator.html#method.terminate
 //! [`Receiver::recv_timeout`]: https://doc.rust-lang.org/std/sync/mpsc/struct.Receiver.html#method.recv_timeout
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
 //! [wait-timeout]: https://crates.io/crates/wait-timeout
@@ -69,7 +66,6 @@
 )]
 #![warn(unused_results)]
 
-use std::io::ErrorKind as IoErrorKind;
 use std::io::Read;
 use std::io::Result as IoResult;
 use std::os::raw::c_uint;
@@ -96,66 +92,53 @@ impl ProcessTerminator {
     /// Terminates a process as immediately as the operating system allows.
     ///
     /// Behavior should be equivalent to calling [`Child::kill`] for the same
-    /// process. The guarantees on the result of that method are also
-    /// maintained; different [`ErrorKind`] variants may be returned in the
-    /// future for the same type of failure. Allowing these breakages is
-    /// required to be compatible with the [`Error`] type.
+    /// process. However, this method does not require a reference of any kind
+    /// to the [`Child`] instance of the process, meaning that it can be called
+    /// even in some unsafe circumstances.
     ///
-    /// # Panics
+    /// # Safety
     ///
-    /// Panics if the operating system gives conflicting indicators of whether
-    /// the termination signal was accepted.
+    /// If the process is no longer running, a different process may be
+    /// terminated on some operating systems. Reuse of process identifiers
+    /// makes it impossible for this method to determine if the intended
+    /// process still exists.
+    ///
+    /// Thus, this method should not be used in production code, as
+    /// [`Child::kill`] more safely provides the same functionality. It is only
+    /// used for testing in this crate and may be used similarly in others.
     ///
     /// # Examples
     ///
     /// ```
-    /// use std::io::Result as IoResult;
+    /// # use std::io::Result as IoResult;
+    /// use std::path::Path;
     /// use std::process::Command;
     /// use std::thread;
-    /// use std::thread::JoinHandle;
     ///
     /// use process_control::ChildExt;
     ///
     /// # fn main() -> IoResult<()> {
-    /// let mut process = Command::new("echo").spawn()?;
+    /// let dir = Path::new("hello");
+    /// let mut process = Command::new("mkdir").arg(dir).spawn()?;
     /// let process_terminator = process.terminator()?;
     ///
-    /// let thread: JoinHandle<IoResult<_>> = thread::spawn(move || {
-    ///     process.wait()?;
-    ///     println!("waited");
-    ///     Ok(())
-    /// });
+    /// let thread = thread::spawn(move || process.wait());
+    /// if !dir.exists() {
+    ///     // [process.kill] requires a mutable reference.
+    ///     unsafe { process_terminator.terminate()? }
+    /// }
     ///
-    /// // [process.kill] requires a mutable reference.
-    /// process_terminator.terminate()?;
-    /// thread.join().expect("thread panicked")?;
+    /// let exit_status = thread.join().expect("thread panicked")?;
+    /// println!("exited {}", exit_status);
     /// #     Ok(())
     /// # }
     /// ```
     ///
+    /// [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
     /// [`Child::kill`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.kill
-    /// [`Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
     #[inline]
-    pub fn terminate(&self) -> IoResult<()> {
+    pub unsafe fn terminate(&self) -> IoResult<()> {
         self.0.terminate()
-    }
-
-    /// Terminates a process as immediately as the operating system allows,
-    /// ignoring errors about the process no longer existing.
-    ///
-    /// For more information, see [`terminate`].
-    ///
-    /// [`terminate`]: #method.terminate
-    #[inline]
-    pub fn terminate_if_necessary(&self) -> IoResult<()> {
-        let result = self.terminate();
-        if let Err(error) = &result {
-            if error.kind() == IoErrorKind::NotFound {
-                return Ok(());
-            }
-        }
-        result
     }
 }
 
@@ -187,7 +170,7 @@ impl ExitStatus {
 
     /// Equivalent to [`ExitStatusExt::signal`].
     ///
-    /// *This function is only available on Unix systems.*
+    /// *This method is only available on Unix systems.*
     ///
     /// [`ExitStatusExt::signal`]: https://doc.rust-lang.org/std/os/unix/process/trait.ExitStatusExt.html#tymethod.signal
     #[cfg(unix)]
@@ -332,6 +315,7 @@ macro_rules! r#impl {
             process: $process_type,
             handle: imp::Handle,
             time_limit: Duration,
+            strict_errors: bool,
             terminate: bool,
         }
 
@@ -341,19 +325,31 @@ macro_rules! r#impl {
                     handle: imp::Handle::inherited(&process),
                     process,
                     time_limit,
+                    strict_errors: false,
                     terminate: false,
                 }
+            }
+
+            /// Causes [`wait`] to never suppress an error.
+            ///
+            /// Typically, errors terminating the process will be ignored, as
+            /// they are often less important than the result. However, when
+            /// this method is called, these errors will be returned as well.
+            ///
+            /// [`wait`]: #method.wait
+            #[inline]
+            #[must_use]
+            pub fn strict_errors(mut self) -> Self {
+                self.strict_errors = true;
+                self
             }
 
             /// Causes the process to be terminated if it exceeds the time
             /// limit.
             ///
-            /// Errors terminating the process will be ignored, as they are
-            /// often less important than the result. To catch those errors,
-            /// [`ProcessTerminator::terminate`] should be called explicitly
-            /// instead.
-            ///
-            /// [`ProcessTerminator::terminate`]: struct.ProcessTerminator.html#method.terminate
+            /// Process identifier reuse by the system will be mitigated. There
+            /// should never be a scenario that causes an unintended process to
+            /// be terminated.
             #[inline]
             #[must_use]
             pub fn terminating(mut self) -> Self {
@@ -369,27 +365,31 @@ macro_rules! r#impl {
                 }
 
                 let _ = self.process.stdin.take();
-                let result = self
+                let mut result = self
                     .handle
                     .wait_with_timeout(self.time_limit)
                     .map(|x| x.map(ExitStatus));
+
+                macro_rules! try_run {
+                    ( $result:expr ) => {
+                        let next_result = $result;
+                        if self.strict_errors && result.is_ok() {
+                            if let Err(error) = next_result {
+                                result = Err(error);
+                            }
+                        }
+                    };
+                }
 
                 if self.terminate {
                     // If the process exited normally, identifier reuse might
                     // cause a different process to be terminated.
                     if let Ok(Some(_)) = result {
                     } else {
-                        let terminator =
-                            <Child as ChildExt>::terminator(&self.process);
-                        // Errors terminating a process are less important than
-                        // the result.
-                        if let Ok(terminator) = terminator {
-                            let _ = terminator.terminate();
-                        }
-                        let _ = self.process.wait();
+                        try_run!(self.process.kill().and(self.process.wait()));
                     }
                 }
-                let _ = self.process.try_wait();
+                try_run!(self.process.try_wait());
 
                 result
             }
@@ -410,6 +410,13 @@ macro_rules! r#impl {
             /// before waiting. Otherwise, the process would be guaranteed to
             /// time out.
             ///
+            /// This method cannot guarantee that the same [`ErrorKind`]
+            /// variants will be returned in the future for the same type of
+            /// failure. Allowing these breakages is required to be compatible
+            /// with the [`Error`] type.
+            ///
+            /// [`Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
+            /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
             /// [`terminating`]: #method.terminating
             #[inline]
             pub fn wait(mut self) -> IoResult<Option<$return_type>> {

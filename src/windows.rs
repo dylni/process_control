@@ -14,7 +14,6 @@ use winapi::shared::minwindef::DWORD;
 use winapi::shared::minwindef::TRUE;
 use winapi::shared::winerror::ERROR_ACCESS_DENIED;
 use winapi::shared::winerror::ERROR_INVALID_HANDLE;
-use winapi::shared::winerror::ERROR_SUCCESS;
 use winapi::shared::winerror::WAIT_TIMEOUT;
 use winapi::um::handleapi::CloseHandle;
 use winapi::um::handleapi::DuplicateHandle;
@@ -104,27 +103,11 @@ impl Handle {
         error.raw_os_error().and_then(|x| x.try_into().ok())
     }
 
-    fn last_error() -> IoError {
-        let error = IoError::last_os_error();
-        if let Some(error_code) = Self::raw_os_error(&error) {
-            match error_code {
-                ERROR_SUCCESS => {
-                    panic!("successful system call reported failure");
-                }
-                // This error is usually decoded to [ErrorKind::Other]:
-                // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/mod.rs#L55-L82
-                ERROR_INVALID_HANDLE => return Self::not_found_error(),
-                _ => {}
-            };
-        }
-        error
-    }
-
     fn check_syscall(result: BOOL) -> IoResult<()> {
         if result == TRUE {
             Ok(())
         } else {
-            Err(Self::last_error())
+            Err(IoError::last_os_error())
         }
     }
 
@@ -144,13 +127,21 @@ impl Handle {
         let result =
             Self::check_syscall(unsafe { TerminateProcess(self.raw(), 1) });
         if let Err(error) = &result {
-            // [TerminateProcess] fails if the process is being destroyed:
-            // https://github.com/haskell/process/pull/111
-            if Self::raw_os_error(error) == Some(ERROR_ACCESS_DENIED) {
-                if let Ok(exit_code) = self.get_exit_code() {
-                    if exit_code != STILL_ACTIVE {
+            if let Some(error_code) = Self::raw_os_error(error) {
+                match error_code {
+                    ERROR_ACCESS_DENIED => {
+                        if let Ok(exit_code) = self.get_exit_code() {
+                            if exit_code != STILL_ACTIVE {
+                                return Err(Self::not_found_error());
+                            }
+                        }
+                    }
+                    // This error is usually decoded to [ErrorKind::Other]:
+                    // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/mod.rs#L55-L82
+                    ERROR_INVALID_HANDLE => {
                         return Err(Self::not_found_error());
                     }
+                    _ => {}
                 }
             }
         }
@@ -170,7 +161,7 @@ impl Handle {
         match unsafe { WaitForSingleObject(self.raw(), time_limit_ms) } {
             WAIT_OBJECT_0 => {}
             WAIT_TIMEOUT => return Ok(None),
-            _ => return Err(Self::last_error()),
+            _ => return Err(IoError::last_os_error()),
         }
 
         let exit_code = self.get_exit_code()?;
