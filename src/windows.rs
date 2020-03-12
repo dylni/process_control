@@ -2,10 +2,11 @@ use std::convert::TryInto;
 use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
+use std::os::raw::c_uint;
 use std::os::windows::io::AsRawHandle;
-use std::os::windows::process::ExitStatusExt;
 use std::process::Child;
-use std::process::ExitStatus;
+use std::process::ExitStatus as ProcessExitStatus;
+use std::ptr;
 use std::time::Duration;
 
 use winapi::shared::minwindef::BOOL;
@@ -15,19 +16,84 @@ use winapi::shared::winerror::ERROR_ACCESS_DENIED;
 use winapi::shared::winerror::ERROR_INVALID_HANDLE;
 use winapi::shared::winerror::ERROR_SUCCESS;
 use winapi::shared::winerror::WAIT_TIMEOUT;
+use winapi::um::handleapi::CloseHandle;
+use winapi::um::handleapi::DuplicateHandle;
 use winapi::um::minwinbase::STILL_ACTIVE;
+use winapi::um::processthreadsapi::GetCurrentProcess;
 use winapi::um::processthreadsapi::GetExitCodeProcess;
 use winapi::um::processthreadsapi::TerminateProcess;
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winbase::WAIT_OBJECT_0;
+use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
 use winapi::um::winnt::HANDLE;
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ExitStatus(DWORD);
+
+impl ExitStatus {
+    pub(crate) fn success(self) -> bool {
+        self.0 == 0
+    }
+
+    pub(crate) fn code(self) -> Option<c_uint> {
+        Some(self.0)
+    }
+}
+
+impl From<ProcessExitStatus> for ExitStatus {
+    fn from(status: ProcessExitStatus) -> Self {
+        if let Some(exit_code) = status.code() {
+            Self(exit_code.try_into().expect("return exit code is invalid"))
+        } else {
+            unreachable!()
+        }
+    }
+}
+
 #[derive(Debug)]
-pub(crate) struct Handle(HANDLE);
+struct RawHandle(HANDLE);
+
+// SAFETY: Process handles are thread-safe:
+// https://stackoverflow.com/questions/12212628/win32-handles-and-multithread/12214212#12214212
+unsafe impl Send for RawHandle {}
+unsafe impl Sync for RawHandle {}
+
+#[derive(Debug)]
+pub(crate) struct Handle {
+    handle: RawHandle,
+    duplicated: bool,
+}
 
 impl Handle {
-    pub(crate) fn new(process: &Child) -> Self {
-        Self(process.as_raw_handle() as HANDLE)
+    pub(crate) fn new(process: &Child) -> IoResult<Self> {
+        let parent_handle = unsafe { GetCurrentProcess() };
+        let mut handle = ptr::null_mut();
+        Self::check_syscall(unsafe {
+            DuplicateHandle(
+                parent_handle,
+                Self::get_handle(process),
+                parent_handle,
+                &mut handle,
+                0,
+                TRUE,
+                DUPLICATE_SAME_ACCESS,
+            )
+        })?;
+        Ok(Self {
+            handle: RawHandle(handle),
+            duplicated: true,
+        })
+    }
+
+    pub(crate) fn inherited(process: &Child) -> Self {
+        Self {
+            handle: RawHandle(Self::get_handle(process)),
+            duplicated: false,
+        }
+    }
+
+    fn get_handle(process: &Child) -> HANDLE {
+        process.as_raw_handle() as HANDLE
     }
 
     fn not_found_error() -> IoError {
@@ -62,17 +128,21 @@ impl Handle {
         }
     }
 
+    fn raw(&self) -> HANDLE {
+        self.handle.0
+    }
+
     fn get_exit_code(&self) -> IoResult<DWORD> {
         let mut exit_code = 0;
         Self::check_syscall(unsafe {
-            GetExitCodeProcess(self.0, &mut exit_code)
+            GetExitCodeProcess(self.raw(), &mut exit_code)
         })?;
         Ok(exit_code)
     }
 
     pub(crate) fn terminate(&self) -> IoResult<()> {
         let result =
-            Self::check_syscall(unsafe { TerminateProcess(self.0, 1) });
+            Self::check_syscall(unsafe { TerminateProcess(self.raw(), 1) });
         if let Err(error) = &result {
             // [TerminateProcess] fails if the process is being destroyed:
             // https://github.com/haskell/process/pull/111
@@ -97,18 +167,21 @@ impl Handle {
             .as_millis()
             .try_into()
             .unwrap_or_else(|_| DWORD::max_value());
-        match unsafe { WaitForSingleObject(self.0, time_limit_ms) } {
+        match unsafe { WaitForSingleObject(self.raw(), time_limit_ms) } {
             WAIT_OBJECT_0 => {}
             WAIT_TIMEOUT => return Ok(None),
             _ => return Err(Self::last_error()),
         }
 
         let exit_code = self.get_exit_code()?;
-        Ok(Some(ExitStatus::from_raw(exit_code)))
+        Ok(Some(ExitStatus(exit_code)))
     }
 }
 
-// SAFETY: Process handles are thread-safe:
-// https://stackoverflow.com/questions/12212628/win32-handles-and-multithread/12214212#12214212
-unsafe impl Send for Handle {}
-unsafe impl Sync for Handle {}
+impl Drop for Handle {
+    fn drop(&mut self) {
+        if self.duplicated {
+            let _ = unsafe { CloseHandle(self.raw()) };
+        }
+    }
+}

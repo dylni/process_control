@@ -52,7 +52,7 @@ fn create_stdin_process() -> IoResult<Child> {
 #[test]
 fn test_terminate() -> IoResult<()> {
     let process = create_process(None)?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     process_terminator.terminate()?;
     assert_terminated(process)?;
@@ -65,7 +65,7 @@ fn test_terminate() -> IoResult<()> {
 #[test]
 fn test_terminate_if_necessary() -> IoResult<()> {
     let process = create_process(None)?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     process_terminator.terminate_if_necessary()?;
     assert_terminated(process)?;
@@ -76,7 +76,7 @@ fn test_terminate_if_necessary() -> IoResult<()> {
 #[test]
 fn test_wait_with_timeout() -> IoResult<()> {
     let mut process = create_process(Some(ONE_SECOND))?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     assert_eq!(
         Some(Some(0)),
@@ -90,7 +90,7 @@ fn test_wait_with_timeout() -> IoResult<()> {
 #[test]
 fn test_wait_with_timeout_expired() -> IoResult<()> {
     let mut process = create_process(None)?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     assert_eq!(None, process.with_timeout(ONE_SECOND).wait()?);
     thread::sleep(ONE_SECOND);
@@ -100,7 +100,7 @@ fn test_wait_with_timeout_expired() -> IoResult<()> {
 #[test]
 fn test_wait_for_output_with_timeout() -> IoResult<()> {
     let process = create_process(Some(ONE_SECOND))?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     assert_eq!(
         Some(Some(0)),
@@ -117,7 +117,7 @@ fn test_wait_for_output_with_timeout() -> IoResult<()> {
 #[test]
 fn test_wait_for_output_with_timeout_expired() -> IoResult<()> {
     let process = create_process(None)?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     assert_eq!(None, process.with_output_timeout(ONE_SECOND).wait()?);
     thread::sleep(ONE_SECOND);
@@ -127,7 +127,7 @@ fn test_wait_for_output_with_timeout_expired() -> IoResult<()> {
 #[test]
 fn test_wait_with_terminating_timeout() -> IoResult<()> {
     let mut process = create_process(Some(ONE_SECOND))?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     assert_eq!(
         Some(Some(0)),
@@ -145,7 +145,7 @@ fn test_wait_with_terminating_timeout() -> IoResult<()> {
 #[test]
 fn test_wait_with_terminating_timeout_expired() -> IoResult<()> {
     let mut process = create_process(None)?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     assert_eq!(None, process.with_timeout(ONE_SECOND).terminating().wait()?);
     thread::sleep(ONE_SECOND);
@@ -157,7 +157,7 @@ fn test_wait_with_terminating_timeout_expired() -> IoResult<()> {
 #[test]
 fn test_wait_for_output_with_terminating_timeout() -> IoResult<()> {
     let process = create_process(Some(ONE_SECOND))?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     assert_eq!(
         Some(Some(0)),
@@ -175,7 +175,7 @@ fn test_wait_for_output_with_terminating_timeout() -> IoResult<()> {
 #[test]
 fn test_wait_for_output_with_terminating_timeout_expired() -> IoResult<()> {
     let process = create_process(None)?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     assert_eq!(
         None,
@@ -193,7 +193,7 @@ fn test_wait_for_output_with_terminating_timeout_expired() -> IoResult<()> {
 #[test]
 fn test_wait_with_stdin() -> IoResult<()> {
     let mut process = create_stdin_process()?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     assert_eq!(
         Some(Some(0)),
@@ -207,7 +207,7 @@ fn test_wait_with_stdin() -> IoResult<()> {
 #[test]
 fn test_wait_for_output_with_stdin() -> IoResult<()> {
     let process = create_stdin_process()?;
-    let process_terminator = process.terminator();
+    let process_terminator = process.terminator()?;
 
     assert_eq!(
         Some(Some(0)),
