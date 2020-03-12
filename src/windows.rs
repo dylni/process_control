@@ -1,4 +1,7 @@
 use std::convert::TryInto;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
 use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
@@ -46,6 +49,12 @@ impl From<ProcessExitStatus> for ExitStatus {
         } else {
             unreachable!()
         }
+    }
+}
+
+impl Display for ExitStatus {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        write!(formatter, "exit code: {}", self.0)
     }
 }
 

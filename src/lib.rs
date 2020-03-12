@@ -66,6 +66,9 @@
 )]
 #![warn(unused_results)]
 
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
 use std::io::Read;
 use std::io::Result as IoResult;
 use std::os::raw::c_uint;
@@ -178,6 +181,13 @@ impl ExitStatus {
     #[must_use]
     pub fn signal(self) -> Option<c_uint> {
         self.0.signal()
+    }
+}
+
+impl Display for ExitStatus {
+    #[inline]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        self.0.fmt(formatter)
     }
 }
 

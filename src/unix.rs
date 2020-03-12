@@ -1,4 +1,7 @@
 use std::convert::TryInto;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
 use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
@@ -47,6 +50,16 @@ impl ExitStatus {
 
     pub(crate) fn signal(self) -> Option<c_uint> {
         self.convert_value(false)
+    }
+}
+
+impl Display for ExitStatus {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        if self.terminated {
+            write!(formatter, "signal: {}", self.value)
+        } else {
+            write!(formatter, "exit code: {}", self.value)
+        }
     }
 }
 
