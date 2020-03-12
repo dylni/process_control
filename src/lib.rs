@@ -89,9 +89,9 @@ mod imp;
 ///
 /// [`ChildExt::terminator`]: trait.ChildExt.html#tymethod.terminator
 #[derive(Debug)]
-pub struct ProcessTerminator(imp::Handle);
+pub struct Terminator(imp::Handle);
 
-impl ProcessTerminator {
+impl Terminator {
     /// Terminates a process as immediately as the operating system allows.
     ///
     /// Behavior should be equivalent to calling [`Child::kill`] for the same
@@ -123,12 +123,12 @@ impl ProcessTerminator {
     /// # fn main() -> IoResult<()> {
     /// let dir = Path::new("hello");
     /// let mut process = Command::new("mkdir").arg(dir).spawn()?;
-    /// let process_terminator = process.terminator()?;
+    /// let terminator = process.terminator()?;
     ///
     /// let thread = thread::spawn(move || process.wait());
     /// if !dir.exists() {
     ///     // [process.kill] requires a mutable reference.
-    ///     unsafe { process_terminator.terminate()? }
+    ///     unsafe { terminator.terminate()? }
     /// }
     ///
     /// let exit_status = thread.join().expect("thread panicked")?;
@@ -219,93 +219,6 @@ pub struct Output {
     ///
     /// [`Output::stderr`]: https://doc.rust-lang.org/std/process/struct.Output.html#structfield.stderr
     pub stderr: Vec<u8>,
-}
-
-#[deprecated(since = "0.4.0", note = "use `ChildExt` instead")]
-pub trait Terminator: private::Sealed + Sized {
-    #[deprecated(since = "0.4.0", note = "use `ChildExt::terminator` instead")]
-    fn terminator(&self) -> IoResult<ProcessTerminator>;
-
-    #[deprecated(
-        since = "0.4.0",
-        note = "use `ChildExt::with_timeout` instead"
-    )]
-    fn wait_with_timeout(
-        self,
-        time_limit: Duration,
-    ) -> IoResult<Option<(ExitStatus, Self)>>;
-
-    #[deprecated(
-        since = "0.4.0",
-        note = "use `ChildExt::with_output_timeout` instead"
-    )]
-    fn wait_for_output_with_timeout(
-        self,
-        time_limit: Duration,
-    ) -> IoResult<Option<Output>>;
-
-    #[deprecated(
-        since = "0.4.0",
-        note = "use `ChildExt::with_timeout` instead"
-    )]
-    fn wait_with_terminating_timeout(
-        self,
-        time_limit: Duration,
-    ) -> IoResult<Option<(ExitStatus, Self)>>;
-
-    #[deprecated(
-        since = "0.4.0",
-        note = "use `ChildExt::with_output_timeout` instead"
-    )]
-    fn wait_for_output_with_terminating_timeout(
-        self,
-        time_limit: Duration,
-    ) -> IoResult<Option<Output>>;
-}
-
-#[allow(deprecated)]
-impl Terminator for Child {
-    #[inline]
-    fn terminator(&self) -> IoResult<ProcessTerminator> {
-        ChildExt::terminator(self)
-    }
-
-    #[inline]
-    fn wait_with_timeout(
-        mut self,
-        time_limit: Duration,
-    ) -> IoResult<Option<(ExitStatus, Self)>> {
-        self.with_timeout(time_limit)
-            .wait()
-            .map(|x| x.map(|x| (x, self)))
-    }
-
-    #[inline]
-    fn wait_for_output_with_timeout(
-        self,
-        time_limit: Duration,
-    ) -> IoResult<Option<Output>> {
-        self.with_output_timeout(time_limit).wait()
-    }
-
-    #[inline]
-    fn wait_with_terminating_timeout(
-        mut self,
-        time_limit: Duration,
-    ) -> IoResult<Option<(ExitStatus, Self)>> {
-        self.with_timeout(time_limit)
-            .terminating()
-            .wait()
-            .map(|x| x.map(|x| (x, self)))
-    }
-
-    #[inline]
-    fn wait_for_output_with_terminating_timeout(
-        self,
-        time_limit: Duration,
-    ) -> IoResult<Option<Output>> {
-        self.with_output_timeout(time_limit).terminating().wait()
-    }
 }
 
 macro_rules! r#impl {
@@ -472,7 +385,7 @@ r#impl!(
 /// [module]: index.html
 /// [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
 pub trait ChildExt: private::Sealed {
-    /// Creates an instance of [`ProcessTerminator`] for this process.
+    /// Creates an instance of [`Terminator`] for this process.
     ///
     /// # Examples
     ///
@@ -485,13 +398,13 @@ pub trait ChildExt: private::Sealed {
     /// # fn main() -> IoResult<()> {
     /// let process = Command::new("echo").spawn()?;
     /// # #[allow(unused_variables)]
-    /// let process_terminator = process.terminator()?;
+    /// let terminator = process.terminator()?;
     /// #     Ok(())
     /// # }
     /// ```
     ///
-    /// [`ProcessTerminator`]: struct.ProcessTerminator.html
-    fn terminator(&self) -> IoResult<ProcessTerminator>;
+    /// [`Terminator`]: struct.Terminator.html
+    fn terminator(&self) -> IoResult<Terminator>;
 
     /// Creates an instance of [`_ExitStatusTimeout`] for this process.
     ///
@@ -559,8 +472,8 @@ pub trait ChildExt: private::Sealed {
 
 impl ChildExt for Child {
     #[inline]
-    fn terminator(&self) -> IoResult<ProcessTerminator> {
-        imp::Handle::new(self).map(ProcessTerminator)
+    fn terminator(&self) -> IoResult<Terminator> {
+        imp::Handle::new(self).map(Terminator)
     }
 
     #[inline]
