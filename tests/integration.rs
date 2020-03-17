@@ -241,3 +241,44 @@ fn test_wait_for_output_with_stdin() -> IoResult<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_large_output() -> IoResult<()> {
+    const BUFFER_COUNT: usize = 1024;
+    const BUFFER_LENGTH: usize = 1024;
+    const OUTPUT_LENGTH: usize = BUFFER_COUNT * BUFFER_LENGTH;
+
+    let process = Command::new("perl")
+        .arg("-e")
+        .arg(
+            r"for (my $i = 0; $i < $ARGV[0]; $i++) {
+                print 'a' x $ARGV[1];
+                print STDERR 'a' x $ARGV[1];
+            }",
+        )
+        .arg("--")
+        .arg(BUFFER_COUNT.to_string())
+        .arg(BUFFER_LENGTH.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let output = process
+        .with_output_timeout(FIVE_SECONDS)
+        .strict_errors()
+        .wait()?
+        .expect("process timed out");
+
+    assert!(output.status.success());
+
+    assert_eq!(OUTPUT_LENGTH, output.stdout.len());
+    assert_eq!(OUTPUT_LENGTH, output.stderr.len());
+
+    assert!(output
+        .stdout
+        .into_iter()
+        .chain(output.stderr)
+        .all(|x| x == b'a'));
+
+    Ok(())
+}

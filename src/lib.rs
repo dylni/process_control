@@ -69,8 +69,11 @@ use std::fmt::Result as FmtResult;
 use std::io::Read;
 use std::io::Result as IoResult;
 use std::os::raw::c_uint;
+use std::panic;
 use std::process::Child;
 use std::process::ExitStatus as ProcessExitStatus;
+use std::thread::Builder as ThreadBuilder;
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 #[cfg(unix)]
@@ -223,7 +226,7 @@ macro_rules! r#impl {
         $struct:ident $(< $lifetime:lifetime >)? ,
         $process_type:ty ,
         $return_type:ty ,
-        $create_result_fn:expr $(,)?
+        $wait_fn:expr $(,)?
     ) => {
         /// A temporary wrapper for a process timeout.
         ///
@@ -284,11 +287,40 @@ macro_rules! r#impl {
                     return Ok(Some(exit_status.into()));
                 }
 
-                let _ = self.process.stdin.take();
-                let mut result = self
+                self
                     .handle
                     .wait_with_timeout(self.time_limit)
-                    .map(|x| x.map(ExitStatus));
+                    .map(|x| x.map(ExitStatus))
+            }
+
+            /// Runs the process to completion, aborting if it exceeds the time
+            /// limit.
+            ///
+            /// At least one thread will be created to wait on the process
+            /// without blocking the current thread.
+            ///
+            /// If the time limit is exceeded before the process finishes,
+            /// `Ok(None)` will be returned. However, the process will not be
+            /// terminated in that case unless [`terminating`] is called
+            /// beforehand. It is recommended to always call that method to
+            /// allow system resources to be freed.
+            ///
+            /// The stdin handle to the process, if it exists, will be closed
+            /// before waiting. Otherwise, the process would be guaranteed to
+            /// time out.
+            ///
+            /// This method cannot guarantee that the same [`ErrorKind`]
+            /// variants will be returned in the future for the same type of
+            /// failure. Allowing these breakages is required to be compatible
+            /// with the [`Error`] type.
+            ///
+            /// [`Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
+            /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
+            /// [`terminating`]: #method.terminating
+            #[inline]
+            pub fn wait(mut self) -> IoResult<Option<$return_type>> {
+                let _ = self.process.stdin.take();
+                let mut result = $wait_fn(&mut self);
 
                 macro_rules! try_run {
                     ( $result:expr ) => {
@@ -313,37 +345,6 @@ macro_rules! r#impl {
 
                 result
             }
-
-            /// Runs the process to completion, aborting if it exceeds the time
-            /// limit.
-            ///
-            /// A separate thread will be created to wait on the process
-            /// without blocking the current thread.
-            ///
-            /// If the time limit is exceeded before the process finishes,
-            /// `Ok(None)` will be returned. However, the process will not be
-            /// terminated in that case unless [`terminating`] is called
-            /// beforehand. It is recommended to always call that method to
-            /// allow system resources to be freed.
-            ///
-            /// The stdin handle to the process, if it exists, will be closed
-            /// before waiting. Otherwise, the process would be guaranteed to
-            /// time out.
-            ///
-            /// This method cannot guarantee that the same [`ErrorKind`]
-            /// variants will be returned in the future for the same type of
-            /// failure. Allowing these breakages is required to be compatible
-            /// with the [`Error`] type.
-            ///
-            /// [`Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-            /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
-            /// [`terminating`]: #method.terminating
-            #[inline]
-            pub fn wait(mut self) -> IoResult<Option<$return_type>> {
-                self.run_wait()?
-                    .map(|x| $create_result_fn(&mut self, x))
-                    .transpose()
-            }
         }
     };
 }
@@ -352,28 +353,51 @@ r#impl!(
     _ExitStatusTimeout<'a>,
     &'a mut Child,
     ExitStatus,
-    |_, status| Ok(status),
+    Self::run_wait,
 );
 
-r#impl!(
-    _OutputTimeout,
-    Child,
-    Output,
-    |timeout: &mut Self, status| {
-        let mut output = Output {
-            status,
-            stdout: Vec::new(),
-            stderr: Vec::new(),
-        };
-        if let Some(stdout) = &mut timeout.process.stdout {
-            let _ = stdout.read_to_end(&mut output.stdout)?;
-        }
-        if let Some(stderr) = &mut timeout.process.stderr {
-            let _ = stderr.read_to_end(&mut output.stderr)?;
-        }
-        Ok(output)
-    },
-);
+r#impl!(_OutputTimeout, Child, Output, |timeout: &mut Self| {
+    let stdout_reader = spawn_reader(&mut timeout.process.stdout)?;
+    let stderr_reader = spawn_reader(&mut timeout.process.stderr)?;
+
+    return timeout
+        .run_wait()?
+        .map(|x| {
+            Ok(Output {
+                status: x,
+                stdout: join_reader(stdout_reader)?,
+                stderr: join_reader(stderr_reader)?,
+            })
+        })
+        .transpose();
+
+    fn spawn_reader<TSource>(
+        source: &mut Option<TSource>,
+    ) -> IoResult<Option<JoinHandle<IoResult<Vec<u8>>>>>
+    where
+        TSource: 'static + Read + Send,
+    {
+        source
+            .take()
+            .map(|mut x| {
+                ThreadBuilder::new().spawn(move || {
+                    let mut buffer = Vec::new();
+                    let _ = x.read_to_end(&mut buffer)?;
+                    Ok(buffer)
+                })
+            })
+            .transpose()
+    }
+
+    fn join_reader(
+        reader: Option<JoinHandle<IoResult<Vec<u8>>>>,
+    ) -> IoResult<Vec<u8>> {
+        reader
+            .map(|x| x.join().unwrap_or_else(|x| panic::resume_unwind(x)))
+            .transpose()
+            .map(|x| x.unwrap_or_else(Vec::new))
+    }
+});
 
 /// Extensions to [`Child`] for easily terminating processes.
 ///
