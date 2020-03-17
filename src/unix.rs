@@ -5,7 +5,7 @@ use std::fmt::Result as FmtResult;
 use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
-use std::mem;
+use std::mem::MaybeUninit;
 use std::os::raw::c_int;
 use std::os::raw::c_uint;
 use std::os::unix::process::ExitStatusExt;
@@ -146,10 +146,10 @@ impl Handle {
         let process_id = self.0;
         run_with_timeout(
             move || {
-                let mut exit_status: ExitStatus = unsafe { mem::zeroed() };
+                let mut exit_status = MaybeUninit::uninit();
                 loop {
                     let result = Self::check_syscall(unsafe {
-                        wait_for_process(process_id, &mut exit_status)
+                        wait_for_process(process_id, exit_status.as_mut_ptr())
                     });
                     match result {
                         Ok(()) => break,
@@ -160,7 +160,7 @@ impl Handle {
                         }
                     }
                 }
-                Ok(exit_status)
+                Ok(unsafe { exit_status.assume_init() })
             },
             time_limit,
         )?

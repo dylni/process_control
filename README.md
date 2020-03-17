@@ -25,7 +25,7 @@ See the [documentation] for available functionality and examples.
 
 ## Rust version support
 
-The minimum supported Rust toolchain version is currently Rust 1.34.0.
+The minimum supported Rust toolchain version is currently Rust 1.36.0.
 
 ## License
 
