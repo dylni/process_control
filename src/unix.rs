@@ -7,7 +7,6 @@ use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
 use std::mem::MaybeUninit;
 use std::os::raw::c_int;
-use std::os::raw::c_uint;
 use std::os::unix::process::ExitStatusExt;
 use std::process::Child;
 use std::process::ExitStatus as ProcessExitStatus;
@@ -36,20 +35,20 @@ impl ExitStatus {
         !self.terminated && self.value == 0
     }
 
-    fn convert_value(self, normal_exit: bool) -> Option<c_uint> {
+    fn get_value(self, normal_exit: bool) -> Option<c_int> {
         if self.terminated == normal_exit {
             None
         } else {
-            Some(self.value.try_into().expect("exit value is invalid"))
+            Some(self.value)
         }
     }
 
-    pub(crate) fn code(self) -> Option<c_uint> {
-        self.convert_value(true)
+    pub(crate) fn code(self) -> Option<c_int> {
+        self.get_value(true)
     }
 
-    pub(crate) fn signal(self) -> Option<c_uint> {
-        self.convert_value(false)
+    pub(crate) fn signal(self) -> Option<c_int> {
+        self.get_value(false)
     }
 }
 

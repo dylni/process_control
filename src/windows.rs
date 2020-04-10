@@ -5,7 +5,6 @@ use std::fmt::Result as FmtResult;
 use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Result as IoResult;
-use std::os::raw::c_uint;
 use std::os::windows::io::AsRawHandle;
 use std::process::Child;
 use std::process::ExitStatus as ProcessExitStatus;
@@ -30,14 +29,18 @@ use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
 use winapi::um::winnt::HANDLE;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ExitStatus(DWORD);
+pub(crate) struct ExitStatus(i64);
 
 impl ExitStatus {
+    fn new(value: DWORD) -> Self {
+        Self(value.into())
+    }
+
     pub(crate) fn success(self) -> bool {
         self.0 == 0
     }
 
-    pub(crate) fn code(self) -> Option<c_uint> {
+    pub(crate) fn code(self) -> Option<i64> {
         Some(self.0)
     }
 }
@@ -45,7 +48,7 @@ impl ExitStatus {
 impl From<ProcessExitStatus> for ExitStatus {
     fn from(status: ProcessExitStatus) -> Self {
         if let Some(exit_code) = status.code() {
-            Self(exit_code.try_into().expect("return exit code is invalid"))
+            Self(exit_code.into())
         } else {
             unreachable!()
         }
@@ -174,7 +177,7 @@ impl Handle {
         }
 
         let exit_code = self.get_exit_code()?;
-        Ok(Some(ExitStatus(exit_code)))
+        Ok(Some(ExitStatus::new(exit_code)))
     }
 }
 

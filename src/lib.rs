@@ -68,7 +68,6 @@ use std::fmt::Formatter;
 use std::fmt::Result as FmtResult;
 use std::io::Read;
 use std::io::Result as IoResult;
-use std::os::raw::c_uint;
 use std::panic;
 use std::process::Child;
 use std::process::ExitStatus as ProcessExitStatus;
@@ -162,13 +161,14 @@ impl ExitStatus {
         self.0.success()
     }
 
-    /// Equivalent to [`ExitStatus::code`].
+    /// Equivalent to [`ExitStatus::code`], but a more accurate value will be
+    /// returned if possible.
     ///
     /// [`ExitStatus::code`]: https://doc.rust-lang.org/std/process/struct.ExitStatus.html#method.code
     #[inline]
     #[must_use]
-    pub fn code(self) -> Option<c_uint> {
-        self.0.code()
+    pub fn code(self) -> Option<i64> {
+        self.0.code().map(Into::into)
     }
 
     /// Equivalent to [`ExitStatusExt::signal`].
@@ -179,7 +179,7 @@ impl ExitStatus {
     #[cfg(any(unix, doc))]
     #[inline]
     #[must_use]
-    pub fn signal(self) -> Option<c_uint> {
+    pub fn signal(self) -> Option<::std::os::raw::c_int> {
         self.0.signal()
     }
 }
