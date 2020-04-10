@@ -15,13 +15,14 @@
 //! crate. Otherwise, backward compatibility would be more difficult to
 //! maintain for new features.
 //!
-//! # Related Crates
+//! # Comparable Crates
 //!
-//! Crate [wait-timeout] has a similar purpose, but it does not provide the
-//! same functionality. Processes cannot be terminated automatically, and there
-//! is no counterpart to [`Child::wait_with_output`] for simply reading output
-//! from a process with a timeout. This crate aims to fill in those gaps and
-//! simplify the implementation, now that [`Receiver::recv_timeout`] exists.
+//! - [wait-timeout] -
+//!   Made for a related purpose but does not provide the same functionality.
+//!   Processes cannot be terminated automatically, and there is no counterpart
+//!   of [`Child::wait_with_output`] to read output while setting a timeout.
+//!   This crate aims to fill in those gaps and simplify the implementation,
+//!   now that [`Receiver::recv_timeout`] exists.
 //!
 //! # Examples
 //!
@@ -34,6 +35,7 @@
 //! use std::time::Duration;
 //!
 //! use process_control::ChildExt;
+//! use process_control::Timeout;
 //!
 //! # fn main() -> IoResult<()> {
 //! let process = Command::new("echo")
@@ -66,13 +68,9 @@
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fmt::Result as FmtResult;
-use std::io::Read;
 use std::io::Result as IoResult;
-use std::panic;
 use std::process::Child;
 use std::process::ExitStatus as ProcessExitStatus;
-use std::thread::Builder as ThreadBuilder;
-use std::thread::JoinHandle;
 use std::time::Duration;
 
 #[cfg(unix)]
@@ -81,6 +79,8 @@ mod imp;
 #[cfg(windows)]
 #[path = "windows.rs"]
 mod imp;
+
+mod timeout;
 
 /// A wrapper that stores enough information to terminate a process.
 ///
@@ -221,183 +221,53 @@ pub struct Output {
     pub stderr: Vec<u8>,
 }
 
-macro_rules! r#impl {
-    (
-        $struct:ident $(< $lifetime:lifetime >)? ,
-        $process_type:ty ,
-        $return_type:ty ,
-        $wait_fn:expr $(,)?
-    ) => {
-        /// A temporary wrapper for a process timeout.
-        ///
-        /// **Do not use this type explicitly.** It is not part of the backward
-        /// compatibility guarantee of this crate. Only its methods should be
-        /// used.
-        #[derive(Debug)]
-        pub struct $struct$(<$lifetime>)? {
-            process: $process_type,
-            handle: imp::Handle,
-            time_limit: Duration,
-            strict_errors: bool,
-            terminate: bool,
-        }
+/// A temporary wrapper for a process timeout.
+pub trait Timeout: private::Sealed {
+    /// The type returned by [`wait`].
+    ///
+    /// [`wait`]: #tymethod.wait
+    type Result;
 
-        impl$(<$lifetime>)? $struct$(<$lifetime>)? {
-            fn new(process: $process_type, time_limit: Duration) -> Self {
-                Self {
-                    handle: imp::Handle::inherited(&process),
-                    process,
-                    time_limit,
-                    strict_errors: false,
-                    terminate: false,
-                }
-            }
+    /// Causes [`wait`] to never suppress an error.
+    ///
+    /// Typically, errors terminating the process will be ignored, as they are
+    /// often less important than the result. However, when this method is
+    /// called, those errors will be returned as well.
+    ///
+    /// [`wait`]: #tymethod.wait
+    #[must_use]
+    fn strict_errors(self) -> Self;
 
-            /// Causes [`wait`] to never suppress an error.
-            ///
-            /// Typically, errors terminating the process will be ignored, as
-            /// they are often less important than the result. However, when
-            /// this method is called, these errors will be returned as well.
-            ///
-            /// [`wait`]: #method.wait
-            #[inline]
-            #[must_use]
-            pub fn strict_errors(mut self) -> Self {
-                self.strict_errors = true;
-                self
-            }
+    /// Causes the process to be terminated if it exceeds the time limit.
+    ///
+    /// Process identifier reuse by the system will be mitigated. There should
+    /// never be a scenario that causes an unintended process to be terminated.
+    #[must_use]
+    fn terminating(self) -> Self;
 
-            /// Causes the process to be terminated if it exceeds the time
-            /// limit.
-            ///
-            /// Process identifier reuse by the system will be mitigated. There
-            /// should never be a scenario that causes an unintended process to
-            /// be terminated.
-            #[inline]
-            #[must_use]
-            pub fn terminating(mut self) -> Self {
-                self.terminate = true;
-                self
-            }
-
-            fn run_wait(&mut self) -> IoResult<Option<ExitStatus>> {
-                // Check if the exit status was already captured.
-                let result = self.process.try_wait();
-                if let Ok(Some(exit_status)) = result {
-                    return Ok(Some(exit_status.into()));
-                }
-
-                self
-                    .handle
-                    .wait_with_timeout(self.time_limit)
-                    .map(|x| x.map(ExitStatus))
-            }
-
-            /// Runs the process to completion, aborting if it exceeds the time
-            /// limit.
-            ///
-            /// At least one thread will be created to wait on the process
-            /// without blocking the current thread.
-            ///
-            /// If the time limit is exceeded before the process finishes,
-            /// `Ok(None)` will be returned. However, the process will not be
-            /// terminated in that case unless [`terminating`] is called
-            /// beforehand. It is recommended to always call that method to
-            /// allow system resources to be freed.
-            ///
-            /// The stdin handle to the process, if it exists, will be closed
-            /// before waiting. Otherwise, the process would be guaranteed to
-            /// time out.
-            ///
-            /// This method cannot guarantee that the same [`ErrorKind`]
-            /// variants will be returned in the future for the same type of
-            /// failure. Allowing these breakages is required to be compatible
-            /// with the [`Error`] type.
-            ///
-            /// [`Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-            /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
-            /// [`terminating`]: #method.terminating
-            #[inline]
-            pub fn wait(mut self) -> IoResult<Option<$return_type>> {
-                let _ = self.process.stdin.take();
-                let mut result = $wait_fn(&mut self);
-
-                macro_rules! try_run {
-                    ( $result:expr ) => {
-                        let next_result = $result;
-                        if self.strict_errors && result.is_ok() {
-                            if let Err(error) = next_result {
-                                result = Err(error);
-                            }
-                        }
-                    };
-                }
-
-                if self.terminate {
-                    // If the process exited normally, identifier reuse might
-                    // cause a different process to be terminated.
-                    if let Ok(Some(_)) = result {
-                    } else {
-                        try_run!(self.process.kill().and(self.process.wait()));
-                    }
-                }
-                try_run!(self.process.try_wait());
-
-                result
-            }
-        }
-    };
+    /// Runs the process to completion, aborting if it exceeds the time limit.
+    ///
+    /// At least one thread will be created to wait on the process without
+    /// blocking the current thread.
+    ///
+    /// If the time limit is exceeded before the process finishes, `Ok(None)`
+    /// will be returned. However, the process will not be terminated in that
+    /// case unless [`terminating`] is called beforehand. It is recommended to
+    /// always call that method to allow system resources to be freed.
+    ///
+    /// The stdin handle to the process, if it exists, will be closed before
+    /// waiting. Otherwise, the process would assuredly time out when reading
+    /// from that pipe.
+    ///
+    /// This method cannot guarantee that the same [`ErrorKind`] variants will
+    /// be returned in the future for the same types of failures. Allowing
+    /// these breakages is required to be compatible with the [`Error`] type.
+    ///
+    /// [`Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
+    /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
+    /// [`terminating`]: #tymethod.terminating
+    fn wait(self) -> IoResult<Option<Self::Result>>;
 }
-
-r#impl!(
-    _ExitStatusTimeout<'a>,
-    &'a mut Child,
-    ExitStatus,
-    Self::run_wait,
-);
-
-r#impl!(_OutputTimeout, Child, Output, |timeout: &mut Self| {
-    let stdout_reader = spawn_reader(&mut timeout.process.stdout)?;
-    let stderr_reader = spawn_reader(&mut timeout.process.stderr)?;
-
-    return timeout
-        .run_wait()?
-        .map(|x| {
-            Ok(Output {
-                status: x,
-                stdout: join_reader(stdout_reader)?,
-                stderr: join_reader(stderr_reader)?,
-            })
-        })
-        .transpose();
-
-    fn spawn_reader<TSource>(
-        source: &mut Option<TSource>,
-    ) -> IoResult<Option<JoinHandle<IoResult<Vec<u8>>>>>
-    where
-        TSource: 'static + Read + Send,
-    {
-        source
-            .take()
-            .map(|mut x| {
-                ThreadBuilder::new().spawn(move || {
-                    let mut buffer = Vec::new();
-                    let _ = x.read_to_end(&mut buffer)?;
-                    Ok(buffer)
-                })
-            })
-            .transpose()
-    }
-
-    fn join_reader(
-        reader: Option<JoinHandle<IoResult<Vec<u8>>>>,
-    ) -> IoResult<Vec<u8>> {
-        reader
-            .map(|x| x.join().unwrap_or_else(|x| panic::resume_unwind(x)))
-            .transpose()
-            .map(|x| x.unwrap_or_else(Vec::new))
-    }
-});
 
 /// Extensions to [`Child`] for easily terminating processes.
 ///
@@ -405,7 +275,17 @@ r#impl!(_OutputTimeout, Child, Output, |timeout: &mut Self| {
 ///
 /// [module]: index.html
 /// [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
-pub trait ChildExt: private::Sealed {
+pub trait ChildExt<'a>: private::Sealed {
+    /// The type returned by [`with_timeout`].
+    ///
+    /// [`with_timeout`]: #tymethod.with_timeout
+    type ExitStatusTimeout: 'a + Timeout<Result = ExitStatus>;
+
+    /// The type returned by [`with_output_timeout`].
+    ///
+    /// [`with_output_timeout`]: #tymethod.with_output_timeout
+    type OutputTimeout: Timeout<Result = Output>;
+
     /// Creates an instance of [`Terminator`] for this process.
     ///
     /// # Examples
@@ -427,7 +307,8 @@ pub trait ChildExt: private::Sealed {
     /// [`Terminator`]: struct.Terminator.html
     fn terminator(&self) -> IoResult<Terminator>;
 
-    /// Creates an instance of [`_ExitStatusTimeout`] for this process.
+    /// Creates an instance of [`Timeout`] that yields [`ExitStatus`] for this
+    /// process.
     ///
     /// This method parallels [`Child::wait`] when the process must finish
     /// within a time limit.
@@ -440,6 +321,7 @@ pub trait ChildExt: private::Sealed {
     /// use std::time::Duration;
     ///
     /// use process_control::ChildExt;
+    /// use process_control::Timeout;
     ///
     /// # fn main() -> IoResult<()> {
     /// let exit_status = Command::new("echo")
@@ -454,12 +336,16 @@ pub trait ChildExt: private::Sealed {
     /// ```
     ///
     /// [`Child::wait`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait
-    /// [`_ExitStatusTimeout`]: struct._ExitStatusTimeout.html
+    /// [`ExitStatus`]: struct.ExitStatus.html
+    /// [`Timeout`]: trait.Timeout.html
     #[must_use]
-    fn with_timeout(&mut self, time_limit: Duration)
-        -> _ExitStatusTimeout<'_>;
+    fn with_timeout(
+        &'a mut self,
+        time_limit: Duration,
+    ) -> Self::ExitStatusTimeout;
 
-    /// Creates an instance of [`_OutputTimeout`] for this process.
+    /// Creates an instance of [`Timeout`] that yields [`Output`] for this
+    /// process.
     ///
     /// This method parallels [`Child::wait_with_output`] when the process must
     /// finish within a time limit.
@@ -472,6 +358,7 @@ pub trait ChildExt: private::Sealed {
     /// use std::time::Duration;
     ///
     /// use process_control::ChildExt;
+    /// use process_control::Timeout;
     ///
     /// # fn main() -> IoResult<()> {
     /// let output = Command::new("echo")
@@ -486,12 +373,16 @@ pub trait ChildExt: private::Sealed {
     /// ```
     ///
     /// [`Child::wait_with_output`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait_with_output
-    /// [`_OutputTimeout`]: struct._OutputTimeout.html
+    /// [`Output`]: struct.Output.html
+    /// [`Timeout`]: trait.Timeout.html
     #[must_use]
-    fn with_output_timeout(self, time_limit: Duration) -> _OutputTimeout;
+    fn with_output_timeout(self, time_limit: Duration) -> Self::OutputTimeout;
 }
 
-impl ChildExt for Child {
+impl<'a> ChildExt<'a> for Child {
+    type ExitStatusTimeout = timeout::ExitStatusTimeout<'a>;
+    type OutputTimeout = timeout::OutputTimeout;
+
     #[inline]
     fn terminator(&self) -> IoResult<Terminator> {
         imp::Handle::new(self).map(Terminator)
@@ -499,21 +390,25 @@ impl ChildExt for Child {
 
     #[inline]
     fn with_timeout(
-        &mut self,
+        &'a mut self,
         time_limit: Duration,
-    ) -> _ExitStatusTimeout<'_> {
-        _ExitStatusTimeout::new(self, time_limit)
+    ) -> Self::ExitStatusTimeout {
+        Self::ExitStatusTimeout::new(self, time_limit)
     }
 
     #[inline]
-    fn with_output_timeout(self, time_limit: Duration) -> _OutputTimeout {
-        _OutputTimeout::new(self, time_limit)
+    fn with_output_timeout(self, time_limit: Duration) -> Self::OutputTimeout {
+        Self::OutputTimeout::new(self, time_limit)
     }
 }
 
 mod private {
     use std::process::Child;
 
+    use super::timeout;
+
     pub trait Sealed {}
     impl Sealed for Child {}
+    impl Sealed for timeout::ExitStatusTimeout<'_> {}
+    impl Sealed for timeout::OutputTimeout {}
 }

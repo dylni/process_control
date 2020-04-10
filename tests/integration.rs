@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use process_control::ChildExt;
 use process_control::Terminator;
+use process_control::Timeout;
 
 const ONE_SECOND: Duration = Duration::from_secs(1);
 
@@ -267,7 +268,7 @@ fn test_large_output() -> IoResult<()> {
         .with_output_timeout(FIVE_SECONDS)
         .strict_errors()
         .wait()?
-        .expect("process timed out");
+        .unwrap();
 
     assert!(output.status.success());
 

@@ -123,7 +123,7 @@ impl Handle {
         }
     }
 
-    fn raw(&self) -> HANDLE {
+    const fn raw(&self) -> HANDLE {
         self.handle.0
     }
 

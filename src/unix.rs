@@ -122,15 +122,13 @@ impl Handle {
     pub(crate) unsafe fn terminate(&self) -> IoResult<()> {
         let result = Self::check_syscall(libc::kill(self.0, SIGKILL));
         if let Err(error) = &result {
-            if let Some(error_code) = error.raw_os_error() {
-                // This error is usually decoded to [ErrorKind::Other]:
-                // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/mod.rs#L100-L123
-                if error_code == ESRCH {
-                    return Err(IoError::new(
-                        IoErrorKind::NotFound,
-                        "No such process",
-                    ));
-                }
+            // This error is usually decoded to [ErrorKind::Other]:
+            // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/mod.rs#L100-L123
+            if error.raw_os_error() == Some(ESRCH) {
+                return Err(IoError::new(
+                    IoErrorKind::NotFound,
+                    "No such process",
+                ));
             }
         }
         result
