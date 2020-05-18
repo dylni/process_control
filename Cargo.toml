@@ -9,9 +9,13 @@ Methods for ergonomically running processes with timeouts
 """
 repository = "https://github.com/dylni/process_control"
 readme = "README.md"
-keywords = ["process", "timeout", "time_out", "kill", "terminate"]
+keywords = ["kill", "process", "terminate", "timeout", "wait"]
 categories = ["concurrency", "os"]
 license = "MIT OR Apache-2.0"
+
+[package.metadata.docs.rs]
+rustc-args = ["--cfg", "process_control_docs_rs"]
+rustdoc-args = ["--cfg", "process_control_docs_rs"]
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

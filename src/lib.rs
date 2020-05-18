@@ -27,9 +27,7 @@
 //! # Examples
 //!
 //! ```
-//! use std::io::Error as IoError;
-//! use std::io::ErrorKind as IoErrorKind;
-//! # use std::io::Result as IoResult;
+//! use std::io;
 //! use std::process::Command;
 //! use std::process::Stdio;
 //! use std::time::Duration;
@@ -37,7 +35,6 @@
 //! use process_control::ChildExt;
 //! use process_control::Timeout;
 //!
-//! # fn main() -> IoResult<()> {
 //! let process = Command::new("echo")
 //!     .arg("hello")
 //!     .stdout(Stdio::piped())
@@ -48,11 +45,11 @@
 //!     .terminating()
 //!     .wait()?
 //!     .ok_or_else(|| {
-//!         IoError::new(IoErrorKind::TimedOut, "Process timed out")
+//!         io::Error::new(io::ErrorKind::TimedOut, "Process timed out")
 //!     })?;
 //! assert_eq!(b"hello", &output.stdout[..5]);
-//! #     Ok(())
-//! # }
+//! #
+//! # Ok::<_, io::Error>(())
 //! ```
 //!
 //! [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
@@ -63,14 +60,18 @@
 //! [wait-timeout]: https://crates.io/crates/wait-timeout
 
 #![doc(html_root_url = "https://docs.rs/process_control/*")]
+// Only require a nightly compiler when building documentation for docs.rs.
+// This is a private option that should not be used.
+// https://github.com/rust-lang/docs.rs/issues/147#issuecomment-389544407
+#![cfg_attr(process_control_docs_rs, feature(doc_cfg))]
 #![warn(unused_results)]
 
+use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::fmt::Result as FmtResult;
-use std::io::Result as IoResult;
+use std::io;
+use std::process;
 use std::process::Child;
-use std::process::ExitStatus as ProcessExitStatus;
 use std::time::Duration;
 
 #[cfg(unix)]
@@ -112,14 +113,13 @@ impl Terminator {
     /// # Examples
     ///
     /// ```
-    /// # use std::io::Result as IoResult;
+    /// # use std::io;
     /// use std::path::Path;
     /// use std::process::Command;
     /// use std::thread;
     ///
     /// use process_control::ChildExt;
     ///
-    /// # fn main() -> IoResult<()> {
     /// let dir = Path::new("hello");
     /// let mut process = Command::new("mkdir").arg(dir).spawn()?;
     /// let terminator = process.terminator()?;
@@ -132,14 +132,14 @@ impl Terminator {
     ///
     /// let exit_status = thread.join().expect("thread panicked")?;
     /// println!("exited {}", exit_status);
-    /// #     Ok(())
-    /// # }
+    /// #
+    /// # Ok::<_, io::Error>(())
     /// ```
     ///
     /// [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
     /// [`Child::kill`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.kill
     #[inline]
-    pub unsafe fn terminate(&self) -> IoResult<()> {
+    pub unsafe fn terminate(&self) -> io::Result<()> {
         self.0.terminate()
     }
 }
@@ -173,10 +173,9 @@ impl ExitStatus {
 
     /// Equivalent to [`ExitStatusExt::signal`].
     ///
-    /// *This method is only available on Unix systems.*
-    ///
     /// [`ExitStatusExt::signal`]: https://doc.rust-lang.org/std/os/unix/process/trait.ExitStatusExt.html#tymethod.signal
     #[cfg(any(unix, doc))]
+    #[cfg_attr(process_control_docs_rs, doc(cfg(unix)))]
     #[inline]
     #[must_use]
     pub fn signal(self) -> Option<::std::os::raw::c_int> {
@@ -186,14 +185,14 @@ impl ExitStatus {
 
 impl Display for ExitStatus {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         self.0.fmt(formatter)
     }
 }
 
-impl From<ProcessExitStatus> for ExitStatus {
+impl From<process::ExitStatus> for ExitStatus {
     #[inline]
-    fn from(status: ProcessExitStatus) -> Self {
+    fn from(status: process::ExitStatus) -> Self {
         Self(status.into())
     }
 }
@@ -266,7 +265,7 @@ pub trait Timeout: private::Sealed {
     /// [`Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
     /// [`terminating`]: #tymethod.terminating
-    fn wait(self) -> IoResult<Option<Self::Result>>;
+    fn wait(self) -> io::Result<Option<Self::Result>>;
 }
 
 /// Extensions to [`Child`] for easily terminating processes.
@@ -291,21 +290,20 @@ pub trait ChildExt<'a>: private::Sealed {
     /// # Examples
     ///
     /// ```
-    /// # use std::io::Result as IoResult;
+    /// # use std::io;
     /// use std::process::Command;
     ///
     /// use process_control::ChildExt;
     ///
-    /// # fn main() -> IoResult<()> {
     /// let process = Command::new("echo").spawn()?;
     /// # #[allow(unused_variables)]
     /// let terminator = process.terminator()?;
-    /// #     Ok(())
-    /// # }
+    /// #
+    /// # Ok::<_, io::Error>(())
     /// ```
     ///
     /// [`Terminator`]: struct.Terminator.html
-    fn terminator(&self) -> IoResult<Terminator>;
+    fn terminator(&self) -> io::Result<Terminator>;
 
     /// Creates an instance of [`Timeout`] that yields [`ExitStatus`] for this
     /// process.
@@ -316,14 +314,13 @@ pub trait ChildExt<'a>: private::Sealed {
     /// # Examples
     ///
     /// ```
-    /// # use std::io::Result as IoResult;
+    /// # use std::io;
     /// use std::process::Command;
     /// use std::time::Duration;
     ///
     /// use process_control::ChildExt;
     /// use process_control::Timeout;
     ///
-    /// # fn main() -> IoResult<()> {
     /// let exit_status = Command::new("echo")
     ///     .spawn()?
     ///     .with_timeout(Duration::from_secs(1))
@@ -331,8 +328,8 @@ pub trait ChildExt<'a>: private::Sealed {
     ///     .wait()?
     ///     .expect("process timed out");
     /// assert!(exit_status.success());
-    /// #     Ok(())
-    /// # }
+    /// #
+    /// # Ok::<_, io::Error>(())
     /// ```
     ///
     /// [`Child::wait`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait
@@ -353,14 +350,13 @@ pub trait ChildExt<'a>: private::Sealed {
     /// # Examples
     ///
     /// ```
-    /// # use std::io::Result as IoResult;
+    /// # use std::io;
     /// use std::process::Command;
     /// use std::time::Duration;
     ///
     /// use process_control::ChildExt;
     /// use process_control::Timeout;
     ///
-    /// # fn main() -> IoResult<()> {
     /// let output = Command::new("echo")
     ///     .spawn()?
     ///     .with_output_timeout(Duration::from_secs(1))
@@ -368,8 +364,8 @@ pub trait ChildExt<'a>: private::Sealed {
     ///     .wait()?
     ///     .expect("process timed out");
     /// assert!(output.status.success());
-    /// #     Ok(())
-    /// # }
+    /// #
+    /// # Ok::<_, io::Error>(())
     /// ```
     ///
     /// [`Child::wait_with_output`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait_with_output
@@ -384,7 +380,7 @@ impl<'a> ChildExt<'a> for Child {
     type OutputTimeout = timeout::OutputTimeout;
 
     #[inline]
-    fn terminator(&self) -> IoResult<Terminator> {
+    fn terminator(&self) -> io::Result<Terminator> {
         imp::Handle::new(self).map(Terminator)
     }
 

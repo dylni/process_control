@@ -1,17 +1,15 @@
 use std::convert::TryInto;
+use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::fmt::Result as FmtResult;
-use std::io::Error as IoError;
-use std::io::ErrorKind as IoErrorKind;
-use std::io::Result as IoResult;
+use std::io;
 use std::mem::MaybeUninit;
 use std::os::raw::c_int;
 use std::os::unix::process::ExitStatusExt;
+use std::process;
 use std::process::Child;
-use std::process::ExitStatus as ProcessExitStatus;
 use std::sync::mpsc;
-use std::thread::Builder as ThreadBuilder;
+use std::thread;
 use std::time::Duration;
 
 use libc::pid_t;
@@ -53,7 +51,7 @@ impl ExitStatus {
 }
 
 impl Display for ExitStatus {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         if self.terminated {
             write!(formatter, "signal: {}", self.value)
         } else {
@@ -62,8 +60,8 @@ impl Display for ExitStatus {
     }
 }
 
-impl From<ProcessExitStatus> for ExitStatus {
-    fn from(status: ProcessExitStatus) -> Self {
+impl From<process::ExitStatus> for ExitStatus {
+    fn from(status: process::ExitStatus) -> Self {
         if let Some(exit_code) = status.code() {
             Self {
                 value: exit_code,
@@ -83,12 +81,12 @@ impl From<ProcessExitStatus> for ExitStatus {
 pub(crate) fn run_with_timeout<TReturn>(
     get_result_fn: impl 'static + FnOnce() -> TReturn + Send,
     time_limit: Duration,
-) -> IoResult<Option<TReturn>>
+) -> io::Result<Option<TReturn>>
 where
     TReturn: 'static + Send,
 {
     let (result_sender, result_receiver) = mpsc::channel();
-    let _ = ThreadBuilder::new()
+    let _ = thread::Builder::new()
         .spawn(move || result_sender.send(get_result_fn()))?;
 
     Ok(result_receiver.recv_timeout(time_limit).ok())
@@ -98,15 +96,15 @@ where
 pub(crate) struct Handle(pid_t);
 
 impl Handle {
-    fn check_syscall(result: c_int) -> IoResult<()> {
+    fn check_syscall(result: c_int) -> io::Result<()> {
         if result >= 0 {
             Ok(())
         } else {
-            Err(IoError::last_os_error())
+            Err(io::Error::last_os_error())
         }
     }
 
-    pub(crate) fn new(process: &Child) -> IoResult<Self> {
+    pub(crate) fn new(process: &Child) -> io::Result<Self> {
         Ok(Self::inherited(process))
     }
 
@@ -119,14 +117,14 @@ impl Handle {
         )
     }
 
-    pub(crate) unsafe fn terminate(&self) -> IoResult<()> {
+    pub(crate) unsafe fn terminate(&self) -> io::Result<()> {
         let result = Self::check_syscall(libc::kill(self.0, SIGKILL));
         if let Err(error) = &result {
             // This error is usually decoded to [ErrorKind::Other]:
             // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/mod.rs#L100-L123
             if error.raw_os_error() == Some(ESRCH) {
-                return Err(IoError::new(
-                    IoErrorKind::NotFound,
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
                     "No such process",
                 ));
             }
@@ -137,7 +135,7 @@ impl Handle {
     pub(crate) fn wait_with_timeout(
         &self,
         time_limit: Duration,
-    ) -> IoResult<Option<ExitStatus>> {
+    ) -> io::Result<Option<ExitStatus>> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/process/process_unix.rs#L432-L441
 
         let process_id = self.0;

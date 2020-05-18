@@ -1,5 +1,4 @@
-use std::io::ErrorKind as IoErrorKind;
-use std::io::Result as IoResult;
+use std::io;
 use std::process::Child;
 use std::process::Command;
 use std::process::Stdio;
@@ -14,7 +13,7 @@ const ONE_SECOND: Duration = Duration::from_secs(1);
 
 const FIVE_SECONDS: Duration = Duration::from_secs(5);
 
-fn create_process(running_time: Option<Duration>) -> IoResult<Child> {
+fn create_process(running_time: Option<Duration>) -> io::Result<Child> {
     Command::new("perl")
         .arg("-e")
         .arg("sleep $ARGV[0]")
@@ -23,11 +22,11 @@ fn create_process(running_time: Option<Duration>) -> IoResult<Child> {
         .spawn()
 }
 
-fn create_stdin_process() -> IoResult<Child> {
+fn create_stdin_process() -> io::Result<Child> {
     Command::new("perl").stdin(Stdio::piped()).spawn()
 }
 
-fn assert_terminated(mut process: Child) -> IoResult<()> {
+fn assert_terminated(mut process: Child) -> io::Result<()> {
     let exit_status = process.wait()?;
     #[cfg(unix)]
     {
@@ -44,13 +43,13 @@ fn assert_terminated(mut process: Child) -> IoResult<()> {
 }
 
 fn assert_not_found(terminator: &Terminator) {
-    assert_eq!(Err(IoErrorKind::NotFound), unsafe {
+    assert_eq!(Err(io::ErrorKind::NotFound), unsafe {
         terminator.terminate().map_err(|x| x.kind())
     });
 }
 
 #[test]
-fn test_terminate() -> IoResult<()> {
+fn test_terminate() -> io::Result<()> {
     let mut process = create_process(None)?;
     let terminator = process.terminator()?;
 
@@ -65,7 +64,7 @@ fn test_terminate() -> IoResult<()> {
 }
 
 #[test]
-fn test_wait_with_timeout() -> IoResult<()> {
+fn test_wait_with_timeout() -> io::Result<()> {
     let mut process = create_process(Some(ONE_SECOND))?;
     let terminator = process.terminator()?;
 
@@ -83,7 +82,7 @@ fn test_wait_with_timeout() -> IoResult<()> {
 }
 
 #[test]
-fn test_wait_with_timeout_expired() -> IoResult<()> {
+fn test_wait_with_timeout_expired() -> io::Result<()> {
     let mut process = create_process(None)?;
     let terminator = process.terminator()?;
 
@@ -96,7 +95,7 @@ fn test_wait_with_timeout_expired() -> IoResult<()> {
 }
 
 #[test]
-fn test_wait_for_output_with_timeout() -> IoResult<()> {
+fn test_wait_for_output_with_timeout() -> io::Result<()> {
     let process = create_process(Some(ONE_SECOND))?;
     let terminator = process.terminator()?;
 
@@ -114,7 +113,7 @@ fn test_wait_for_output_with_timeout() -> IoResult<()> {
 }
 
 #[test]
-fn test_wait_for_output_with_timeout_expired() -> IoResult<()> {
+fn test_wait_for_output_with_timeout_expired() -> io::Result<()> {
     let process = create_process(None)?;
     let terminator = process.terminator()?;
 
@@ -130,7 +129,7 @@ fn test_wait_for_output_with_timeout_expired() -> IoResult<()> {
 }
 
 #[test]
-fn test_wait_with_terminating_timeout() -> IoResult<()> {
+fn test_wait_with_terminating_timeout() -> io::Result<()> {
     let mut process = create_process(Some(ONE_SECOND))?;
     let terminator = process.terminator()?;
 
@@ -149,7 +148,7 @@ fn test_wait_with_terminating_timeout() -> IoResult<()> {
 }
 
 #[test]
-fn test_wait_with_terminating_timeout_expired() -> IoResult<()> {
+fn test_wait_with_terminating_timeout_expired() -> io::Result<()> {
     let mut process = create_process(None)?;
     let terminator = process.terminator()?;
 
@@ -170,7 +169,7 @@ fn test_wait_with_terminating_timeout_expired() -> IoResult<()> {
 }
 
 #[test]
-fn test_wait_for_output_with_terminating_timeout() -> IoResult<()> {
+fn test_wait_for_output_with_terminating_timeout() -> io::Result<()> {
     let process = create_process(Some(ONE_SECOND))?;
     let terminator = process.terminator()?;
 
@@ -189,7 +188,7 @@ fn test_wait_for_output_with_terminating_timeout() -> IoResult<()> {
 }
 
 #[test]
-fn test_wait_for_output_with_terminating_timeout_expired() -> IoResult<()> {
+fn test_wait_for_output_with_terminating_timeout_expired() -> io::Result<()> {
     let process = create_process(None)?;
     let terminator = process.terminator()?;
 
@@ -208,7 +207,7 @@ fn test_wait_for_output_with_terminating_timeout_expired() -> IoResult<()> {
 }
 
 #[test]
-fn test_wait_with_stdin() -> IoResult<()> {
+fn test_wait_with_stdin() -> io::Result<()> {
     let mut process = create_stdin_process()?;
     let terminator = process.terminator()?;
 
@@ -226,7 +225,7 @@ fn test_wait_with_stdin() -> IoResult<()> {
 }
 
 #[test]
-fn test_wait_for_output_with_stdin() -> IoResult<()> {
+fn test_wait_for_output_with_stdin() -> io::Result<()> {
     let process = create_stdin_process()?;
     let terminator = process.terminator()?;
 
@@ -244,7 +243,7 @@ fn test_wait_for_output_with_stdin() -> IoResult<()> {
 }
 
 #[test]
-fn test_large_output() -> IoResult<()> {
+fn test_large_output() -> io::Result<()> {
     const BUFFER_COUNT: usize = 1024;
     const BUFFER_LENGTH: usize = 1024;
     const OUTPUT_LENGTH: usize = BUFFER_COUNT * BUFFER_LENGTH;

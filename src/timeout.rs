@@ -1,8 +1,8 @@
+use std::io;
 use std::io::Read;
-use std::io::Result as IoResult;
 use std::panic;
 use std::process::Child;
-use std::thread::Builder as ThreadBuilder;
+use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -41,7 +41,7 @@ macro_rules! r#impl {
                 }
             }
 
-            fn run_wait(&mut self) -> IoResult<Option<ExitStatus>> {
+            fn run_wait(&mut self) -> io::Result<Option<ExitStatus>> {
                 // Check if the exit status was already captured.
                 let result = self.process.try_wait();
                 if let Ok(Some(exit_status)) = result {
@@ -72,7 +72,7 @@ macro_rules! r#impl {
             }
 
             #[inline]
-            fn wait(mut self) -> IoResult<Option<Self::Result>> {
+            fn wait(mut self) -> io::Result<Option<Self::Result>> {
                 let _ = self.process.stdin.take();
                 let mut result = $wait_fn(&mut self);
 
@@ -127,14 +127,14 @@ r#impl!(OutputTimeout, Child, Output, |timeout: &mut Self| {
 
     fn spawn_reader<TSource>(
         source: &mut Option<TSource>,
-    ) -> IoResult<Option<JoinHandle<IoResult<Vec<u8>>>>>
+    ) -> io::Result<Option<JoinHandle<io::Result<Vec<u8>>>>>
     where
         TSource: 'static + Read + Send,
     {
         source
             .take()
             .map(|mut x| {
-                ThreadBuilder::new().spawn(move || {
+                thread::Builder::new().spawn(move || {
                     let mut buffer = Vec::new();
                     let _ = x.read_to_end(&mut buffer)?;
                     Ok(buffer)
@@ -144,8 +144,8 @@ r#impl!(OutputTimeout, Child, Output, |timeout: &mut Self| {
     }
 
     fn join_reader(
-        reader: Option<JoinHandle<IoResult<Vec<u8>>>>,
-    ) -> IoResult<Vec<u8>> {
+        reader: Option<JoinHandle<io::Result<Vec<u8>>>>,
+    ) -> io::Result<Vec<u8>> {
         reader
             .map(|x| x.join().unwrap_or_else(|x| panic::resume_unwind(x)))
             .transpose()
