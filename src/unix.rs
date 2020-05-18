@@ -23,13 +23,13 @@ extern "C" {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(C)]
-pub(crate) struct ExitStatus {
+pub(super) struct ExitStatus {
     value: c_int,
     terminated: bool,
 }
 
 impl ExitStatus {
-    pub(crate) fn success(self) -> bool {
+    pub(super) fn success(self) -> bool {
         !self.terminated && self.value == 0
     }
 
@@ -41,11 +41,11 @@ impl ExitStatus {
         }
     }
 
-    pub(crate) fn code(self) -> Option<c_int> {
+    pub(super) fn code(self) -> Option<c_int> {
         self.get_value(true)
     }
 
-    pub(crate) fn signal(self) -> Option<c_int> {
+    pub(super) fn signal(self) -> Option<c_int> {
         self.get_value(false)
     }
 }
@@ -78,7 +78,7 @@ impl From<process::ExitStatus> for ExitStatus {
     }
 }
 
-pub(crate) fn run_with_timeout<TReturn>(
+pub(super) fn run_with_timeout<TReturn>(
     get_result_fn: impl 'static + FnOnce() -> TReturn + Send,
     time_limit: Duration,
 ) -> io::Result<Option<TReturn>>
@@ -93,7 +93,7 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct Handle(pid_t);
+pub(super) struct Handle(pid_t);
 
 impl Handle {
     fn check_syscall(result: c_int) -> io::Result<()> {
@@ -104,11 +104,11 @@ impl Handle {
         }
     }
 
-    pub(crate) fn new(process: &Child) -> io::Result<Self> {
+    pub(super) fn new(process: &Child) -> io::Result<Self> {
         Ok(Self::inherited(process))
     }
 
-    pub(crate) fn inherited(process: &Child) -> Self {
+    pub(super) fn inherited(process: &Child) -> Self {
         Self(
             process
                 .id()
@@ -117,7 +117,7 @@ impl Handle {
         )
     }
 
-    pub(crate) unsafe fn terminate(&self) -> io::Result<()> {
+    pub(super) unsafe fn terminate(&self) -> io::Result<()> {
         let result = Self::check_syscall(libc::kill(self.0, SIGKILL));
         if let Err(error) = &result {
             // This error is usually decoded to [ErrorKind::Other]:
@@ -132,7 +132,7 @@ impl Handle {
         result
     }
 
-    pub(crate) fn wait_with_timeout(
+    pub(super) fn wait_with_timeout(
         &self,
         time_limit: Duration,
     ) -> io::Result<Option<ExitStatus>> {

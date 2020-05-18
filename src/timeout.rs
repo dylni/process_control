@@ -28,7 +28,7 @@ macro_rules! r#impl {
         }
 
         impl$(<$lifetime>)? $struct$(<$lifetime>)? {
-            pub(crate) fn new(
+            pub(super) fn new(
                 process: $process_type,
                 time_limit: Duration,
             ) -> Self {

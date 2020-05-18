@@ -27,18 +27,18 @@ use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
 use winapi::um::winnt::HANDLE;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ExitStatus(i64);
+pub(super) struct ExitStatus(i64);
 
 impl ExitStatus {
     fn new(value: DWORD) -> Self {
         Self(value.into())
     }
 
-    pub(crate) fn success(self) -> bool {
+    pub(super) fn success(self) -> bool {
         self.0 == 0
     }
 
-    pub(crate) fn code(self) -> Option<i64> {
+    pub(super) fn code(self) -> Option<i64> {
         Some(self.0)
     }
 }
@@ -68,7 +68,7 @@ unsafe impl Send for RawHandle {}
 unsafe impl Sync for RawHandle {}
 
 #[derive(Debug)]
-pub(crate) struct Handle {
+pub(super) struct Handle {
     handle: RawHandle,
     duplicated: bool,
 }
@@ -94,7 +94,7 @@ impl Handle {
         }
     }
 
-    pub(crate) fn new(process: &Child) -> io::Result<Self> {
+    pub(super) fn new(process: &Child) -> io::Result<Self> {
         let parent_handle = unsafe { GetCurrentProcess() };
         let mut handle = ptr::null_mut();
         Self::check_syscall(unsafe {
@@ -114,7 +114,7 @@ impl Handle {
         })
     }
 
-    pub(crate) fn inherited(process: &Child) -> Self {
+    pub(super) fn inherited(process: &Child) -> Self {
         Self {
             handle: RawHandle(Self::get_handle(process)),
             duplicated: false,
@@ -133,7 +133,7 @@ impl Handle {
         Ok(exit_code)
     }
 
-    pub(crate) fn terminate(&self) -> io::Result<()> {
+    pub(super) fn terminate(&self) -> io::Result<()> {
         let result =
             Self::check_syscall(unsafe { TerminateProcess(self.raw(), 1) });
         if let Err(error) = &result {
@@ -158,7 +158,7 @@ impl Handle {
         result
     }
 
-    pub(crate) fn wait_with_timeout(
+    pub(super) fn wait_with_timeout(
         &self,
         time_limit: Duration,
     ) -> io::Result<Option<ExitStatus>> {
