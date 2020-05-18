@@ -192,8 +192,8 @@ impl Display for ExitStatus {
 
 impl From<process::ExitStatus> for ExitStatus {
     #[inline]
-    fn from(status: process::ExitStatus) -> Self {
-        Self(status.into())
+    fn from(value: process::ExitStatus) -> Self {
+        Self(value.into())
     }
 }
 
@@ -218,6 +218,17 @@ pub struct Output {
     ///
     /// [`Output::stderr`]: https://doc.rust-lang.org/std/process/struct.Output.html#structfield.stderr
     pub stderr: Vec<u8>,
+}
+
+impl From<process::Output> for Output {
+    #[inline]
+    fn from(value: process::Output) -> Self {
+        Self {
+            status: value.status.into(),
+            stdout: value.stdout,
+            stderr: value.stderr,
+        }
+    }
 }
 
 /// A temporary wrapper for a process timeout.

@@ -61,13 +61,13 @@ impl Display for ExitStatus {
 }
 
 impl From<process::ExitStatus> for ExitStatus {
-    fn from(status: process::ExitStatus) -> Self {
-        if let Some(exit_code) = status.code() {
+    fn from(value: process::ExitStatus) -> Self {
+        if let Some(exit_code) = value.code() {
             Self {
                 value: exit_code,
                 terminated: false,
             }
-        } else if let Some(signal) = status.signal() {
+        } else if let Some(signal) = value.signal() {
             Self {
                 value: signal,
                 terminated: true,

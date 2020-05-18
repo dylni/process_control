@@ -44,8 +44,8 @@ impl ExitStatus {
 }
 
 impl From<process::ExitStatus> for ExitStatus {
-    fn from(status: process::ExitStatus) -> Self {
-        if let Some(exit_code) = status.code() {
+    fn from(value: process::ExitStatus) -> Self {
+        if let Some(exit_code) = value.code() {
             Self(exit_code.into())
         } else {
             unreachable!()
