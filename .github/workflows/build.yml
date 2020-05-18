@@ -12,7 +12,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
       with:
-        fetch-depth: 1
+        fetch-depth: 10
     - run: cargo clippy -- -Dwarnings
     - run: cargo clippy --tests -- -Dwarnings
     - run: cargo fmt -- --check
@@ -28,7 +28,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
       with:
-        fetch-depth: 1
+        fetch-depth: 10
     - run: rustup install ${{ matrix.version }}
     - run: rustup default ${{ matrix.version }}
     - run: cargo test
