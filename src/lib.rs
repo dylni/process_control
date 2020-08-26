@@ -272,9 +272,10 @@ pub trait Timeout: private::Sealed {
     ///
     /// This method cannot guarantee that the same [`ErrorKind`] variants will
     /// be returned in the future for the same types of failures. Allowing
-    /// these breakages is required to be compatible with the [`Error`] type.
+    /// these breakages is required to enable calling [`Child::kill`]
+    /// internally.
     ///
-    /// [`Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
+    /// [`Child::kill`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.kill
     /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
     /// [`terminating`]: #tymethod.terminating
     fn wait(self) -> io::Result<Option<Self::Result>>;
@@ -308,7 +309,6 @@ pub trait ChildExt<'a>: private::Sealed {
     /// use process_control::ChildExt;
     ///
     /// let process = Command::new("echo").spawn()?;
-    /// # #[allow(unused_variables)]
     /// let terminator = process.terminator()?;
     /// #
     /// # Ok::<_, io::Error>(())

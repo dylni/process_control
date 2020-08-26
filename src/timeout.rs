@@ -55,7 +55,6 @@ macro_rules! r#impl {
             }
         }
 
-        #[allow(single_use_lifetimes)]
         impl$(<$lifetime>)? Timeout for $struct$(<$lifetime>)? {
             type Result = $return_type;
 

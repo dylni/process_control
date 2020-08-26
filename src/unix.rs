@@ -34,11 +34,7 @@ impl ExitStatus {
     }
 
     fn get_value(self, normal_exit: bool) -> Option<c_int> {
-        if self.terminated == normal_exit {
-            None
-        } else {
-            Some(self.value)
-        }
+        Some(self.value).filter(|_| self.terminated != normal_exit)
     }
 
     pub(super) fn code(self) -> Option<c_int> {
