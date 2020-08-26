@@ -18,7 +18,7 @@ Add the following lines to your "Cargo.toml" file:
 
 ```toml
 [dependencies]
-process_control = "1.1"
+process_control = "2.0"
 ```
 
 See the [documentation] for available functionality and examples.
