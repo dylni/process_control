@@ -15,6 +15,17 @@
 //! crate. Otherwise, backward compatibility would be more difficult to
 //! maintain for new features.
 //!
+//! # Features
+//!
+//! These features are optional and can be enabled or disabled in a
+//! "Cargo.toml" file.
+//!
+//! ### Optional Features
+//!
+//! - **crossbeam-channel** -
+//!   Changes the implementation to use crate [crossbeam-channel] for better
+//!   performance.
+//!
 //! # Comparable Crates
 //!
 //! - [wait-timeout] -
@@ -55,6 +66,7 @@
 //! [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
 //! [`ChildExt`]: trait.ChildExt.html
 //! [`Child::wait_with_output`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait_with_output
+//! [crossbeam-channel]: https://crates.io/crates/crossbeam-channel
 //! [`Receiver::recv_timeout`]: https://doc.rust-lang.org/std/sync/mpsc/struct.Receiver.html#method.recv_timeout
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
 //! [wait-timeout]: https://crates.io/crates/wait-timeout

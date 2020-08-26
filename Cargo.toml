@@ -18,6 +18,7 @@ rustc-args = ["--cfg", "process_control_docs_rs"]
 rustdoc-args = ["--cfg", "process_control_docs_rs"]
 
 [target.'cfg(unix)'.dependencies]
+crossbeam-channel = { version = "0.4", optional = true }
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]

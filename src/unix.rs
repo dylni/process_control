@@ -8,7 +8,6 @@ use std::os::raw::c_int;
 use std::os::unix::process::ExitStatusExt;
 use std::process;
 use std::process::Child;
-use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
@@ -81,7 +80,18 @@ pub(super) fn run_with_timeout<TReturn>(
 where
     TReturn: 'static + Send,
 {
-    let (result_sender, result_receiver) = mpsc::channel();
+    let (result_sender, result_receiver) = {
+        #[cfg(feature = "crossbeam-channel")]
+        {
+            crossbeam_channel::bounded(0)
+        }
+        #[cfg(not(feature = "crossbeam-channel"))]
+        {
+            use std::sync::mpsc;
+
+            mpsc::channel()
+        }
+    };
     let _ = thread::Builder::new()
         .spawn(move || result_sender.send(get_result_fn()))?;
 
