@@ -193,6 +193,7 @@ impl Display for ExitStatus {
 impl From<process::ExitStatus> for ExitStatus {
     #[inline]
     fn from(value: process::ExitStatus) -> Self {
+        #[cfg_attr(windows, allow(clippy::useless_conversion))]
         Self(value.into())
     }
 }

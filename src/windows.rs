@@ -1,11 +1,9 @@
 use std::convert::TryInto;
-use std::fmt;
-use std::fmt::Display;
-use std::fmt::Formatter;
 use std::io;
 use std::os::windows::io::AsRawHandle;
-use std::process;
+use std::os::windows::process::ExitStatusExt;
 use std::process::Child;
+pub(super) use std::process::ExitStatus;
 use std::ptr;
 use std::time::Duration;
 
@@ -25,39 +23,6 @@ use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winbase::WAIT_OBJECT_0;
 use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
 use winapi::um::winnt::HANDLE;
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(super) struct ExitStatus(i64);
-
-impl ExitStatus {
-    fn new(value: DWORD) -> Self {
-        Self(value.into())
-    }
-
-    pub(super) fn success(self) -> bool {
-        self.0 == 0
-    }
-
-    pub(super) fn code(self) -> Option<i64> {
-        Some(self.0)
-    }
-}
-
-impl From<process::ExitStatus> for ExitStatus {
-    fn from(value: process::ExitStatus) -> Self {
-        if let Some(exit_code) = value.code() {
-            Self(exit_code.into())
-        } else {
-            unreachable!()
-        }
-    }
-}
-
-impl Display for ExitStatus {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "exit code: {}", self.0)
-    }
-}
 
 #[derive(Debug)]
 struct RawHandle(HANDLE);
@@ -175,7 +140,7 @@ impl Handle {
         }
 
         let exit_code = self.get_exit_code()?;
-        Ok(Some(ExitStatus::new(exit_code)))
+        Ok(Some(ExitStatus::from_raw(exit_code)))
     }
 }
 
