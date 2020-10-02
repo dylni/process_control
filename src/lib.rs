@@ -63,11 +63,8 @@
 //! # Ok::<_, io::Error>(())
 //! ```
 //!
-//! [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
-//! [`ChildExt`]: trait.ChildExt.html
-//! [`Child::wait_with_output`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait_with_output
 //! [crossbeam-channel]: https://crates.io/crates/crossbeam-channel
-//! [`Receiver::recv_timeout`]: https://doc.rust-lang.org/std/sync/mpsc/struct.Receiver.html#method.recv_timeout
+//! [`Receiver::recv_timeout`]: ::std::sync::mpsc::Receiver::recv_timeout
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
 //! [wait-timeout]: https://crates.io/crates/wait-timeout
 
@@ -98,8 +95,6 @@ mod timeout;
 /// A wrapper that stores enough information to terminate a process.
 ///
 /// Instances can only be constructed using [`ChildExt::terminator`].
-///
-/// [`ChildExt::terminator`]: trait.ChildExt.html#tymethod.terminator
 #[derive(Debug)]
 pub struct Terminator(imp::Handle);
 
@@ -147,36 +142,26 @@ impl Terminator {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
-    ///
-    /// [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
-    /// [`Child::kill`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.kill
     #[inline]
     pub unsafe fn terminate(&self) -> io::Result<()> {
         self.0.terminate()
     }
 }
 
-/// Equivalent to [`ExitStatus`] in the standard library but allows for greater
-/// accuracy.
-///
-/// [`ExitStatus`]: https://doc.rust-lang.org/std/process/struct.ExitStatus.html
+/// Equivalent to [`process::ExitStatus`] but allows for greater accuracy.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct ExitStatus(imp::ExitStatus);
 
 impl ExitStatus {
-    /// Equivalent to [`ExitStatus::success`].
-    ///
-    /// [`ExitStatus::success`]: https://doc.rust-lang.org/std/process/struct.ExitStatus.html#method.success
+    /// Equivalent to [`process::ExitStatus::success`].
     #[inline]
     #[must_use]
     pub fn success(self) -> bool {
         self.0.success()
     }
 
-    /// Equivalent to [`ExitStatus::code`], but a more accurate value will be
-    /// returned if possible.
-    ///
-    /// [`ExitStatus::code`]: https://doc.rust-lang.org/std/process/struct.ExitStatus.html#method.code
+    /// Equivalent to [`process::ExitStatus::code`], but a more accurate value
+    /// will be returned if possible.
     #[inline]
     #[must_use]
     pub fn code(self) -> Option<i64> {
@@ -185,7 +170,7 @@ impl ExitStatus {
 
     /// Equivalent to [`ExitStatusExt::signal`].
     ///
-    /// [`ExitStatusExt::signal`]: https://doc.rust-lang.org/std/os/unix/process/trait.ExitStatusExt.html#tymethod.signal
+    /// [`ExitStatusExt::signal`]: ::std::os::unix::process::ExitStatusExt::signal
     #[cfg(any(unix, doc))]
     #[cfg_attr(process_control_docs_rs, doc(cfg(unix)))]
     #[inline]
@@ -210,26 +195,17 @@ impl From<process::ExitStatus> for ExitStatus {
     }
 }
 
-/// Equivalent to [`Output`] in the standard library but holds an instance of
-/// [`ExitStatus`] from this crate.
-///
-/// [`ExitStatus`]: struct.ExitStatus.html
-/// [`Output`]: https://doc.rust-lang.org/std/process/struct.Output.html
+/// Equivalent to [`process::Output`] but holds an instance of [`ExitStatus`]
+/// from this crate.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Output {
-    /// Equivalent to [`Output::status`].
-    ///
-    /// [`Output::status`]: https://doc.rust-lang.org/std/process/struct.Output.html#structfield.status
+    /// Equivalent to [`process::Output::status`].
     pub status: ExitStatus,
 
-    /// Equivalent to [`Output::stdout`].
-    ///
-    /// [`Output::stdout`]: https://doc.rust-lang.org/std/process/struct.Output.html#structfield.stdout
+    /// Equivalent to [`process::Output::stdout`].
     pub stdout: Vec<u8>,
 
-    /// Equivalent to [`Output::stderr`].
-    ///
-    /// [`Output::stderr`]: https://doc.rust-lang.org/std/process/struct.Output.html#structfield.stderr
+    /// Equivalent to [`process::Output::stderr`].
     pub stderr: Vec<u8>,
 }
 
@@ -248,7 +224,7 @@ impl From<process::Output> for Output {
 pub trait Timeout: private::Sealed {
     /// The type returned by [`wait`].
     ///
-    /// [`wait`]: #tymethod.wait
+    /// [`wait`]: Self::wait
     type Result;
 
     /// Causes [`wait`] to never suppress an error.
@@ -257,7 +233,7 @@ pub trait Timeout: private::Sealed {
     /// often less important than the result. However, when this method is
     /// called, those errors will be returned as well.
     ///
-    /// [`wait`]: #tymethod.wait
+    /// [`wait`]: Self::wait
     #[must_use]
     fn strict_errors(self) -> Self;
 
@@ -282,32 +258,27 @@ pub trait Timeout: private::Sealed {
     /// waiting. Otherwise, the process would assuredly time out when reading
     /// from that pipe.
     ///
-    /// This method cannot guarantee that the same [`ErrorKind`] variants will
-    /// be returned in the future for the same types of failures. Allowing
+    /// This method cannot guarantee that the same [`io::ErrorKind`] variants
+    /// will be returned in the future for the same types of failures. Allowing
     /// these breakages is required to enable calling [`Child::kill`]
     /// internally.
     ///
-    /// [`Child::kill`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.kill
-    /// [`ErrorKind`]: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
-    /// [`terminating`]: #tymethod.terminating
+    /// [`terminating`]: Self::terminating
     fn wait(self) -> io::Result<Option<Self::Result>>;
 }
 
 /// Extensions to [`Child`] for easily terminating processes.
 ///
-/// For more information, see [the module-level documentation][module].
-///
-/// [module]: index.html
-/// [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
+/// For more information, see [the module-level documentation][crate].
 pub trait ChildExt<'a>: private::Sealed {
     /// The type returned by [`with_timeout`].
     ///
-    /// [`with_timeout`]: #tymethod.with_timeout
+    /// [`with_timeout`]: Self::with_timeout
     type ExitStatusTimeout: 'a + Timeout<Result = ExitStatus>;
 
     /// The type returned by [`with_output_timeout`].
     ///
-    /// [`with_output_timeout`]: #tymethod.with_output_timeout
+    /// [`with_output_timeout`]: Self::with_output_timeout
     type OutputTimeout: Timeout<Result = Output>;
 
     /// Creates an instance of [`Terminator`] for this process.
@@ -325,8 +296,6 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
-    ///
-    /// [`Terminator`]: struct.Terminator.html
     fn terminator(&self) -> io::Result<Terminator>;
 
     /// Creates an instance of [`Timeout`] that yields [`ExitStatus`] for this
@@ -355,10 +324,6 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
-    ///
-    /// [`Child::wait`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait
-    /// [`ExitStatus`]: struct.ExitStatus.html
-    /// [`Timeout`]: trait.Timeout.html
     #[must_use]
     fn with_timeout(
         &'a mut self,
@@ -391,10 +356,6 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
-    ///
-    /// [`Child::wait_with_output`]: https://doc.rust-lang.org/std/process/struct.Child.html#method.wait_with_output
-    /// [`Output`]: struct.Output.html
-    /// [`Timeout`]: trait.Timeout.html
     #[must_use]
     fn with_output_timeout(self, time_limit: Duration) -> Self::OutputTimeout;
 }
