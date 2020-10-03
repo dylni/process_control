@@ -18,7 +18,7 @@ rustc-args = ["--cfg", "process_control_docs_rs"]
 rustdoc-args = [
     "--cfg", "process_control_docs_rs",
     "--extern-html-root-url", "std=https://doc.rust-lang.org",
-    "-Z unstable-options",
+    "-Zunstable-options",
 ]
 
 [target.'cfg(unix)'.dependencies]
