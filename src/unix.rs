@@ -11,14 +11,15 @@ use std::process::Child;
 use std::thread;
 use std::time::Duration;
 
-use libc::pid_t;
+use libc::id_t;
+use libc::CLD_EXITED;
 use libc::EINTR;
 use libc::ESRCH;
+use libc::P_PID;
 use libc::SIGKILL;
-
-extern "C" {
-    fn wait_for_process(pid: pid_t, exit_status: *mut ExitStatus) -> c_int;
-}
+use libc::WEXITED;
+use libc::WNOWAIT;
+use libc::WSTOPPED;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(C)]
@@ -99,7 +100,7 @@ where
 }
 
 #[derive(Debug)]
-pub(super) struct Handle(pid_t);
+pub(super) struct Handle(id_t);
 
 impl Handle {
     fn check_syscall(result: c_int) -> io::Result<()> {
@@ -115,16 +116,13 @@ impl Handle {
     }
 
     pub(super) fn inherited(process: &Child) -> Self {
-        Self(
-            process
-                .id()
-                .try_into()
-                .expect("returned process identifier is invalid"),
-        )
+        Self(process.id())
     }
 
     pub(super) unsafe fn terminate(&self) -> io::Result<()> {
-        let result = Self::check_syscall(libc::kill(self.0, SIGKILL));
+        let process_id =
+            self.0.try_into().expect("process identifier is invalid");
+        let result = Self::check_syscall(libc::kill(process_id, SIGKILL));
         if let Err(error) = &result {
             // This error is usually decoded to [ErrorKind::Other]:
             // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/mod.rs#L100-L123
@@ -146,22 +144,31 @@ impl Handle {
 
         let process_id = self.0;
         run_with_timeout(
-            move || {
-                let mut exit_status = MaybeUninit::uninit();
-                loop {
-                    let result = Self::check_syscall(unsafe {
-                        wait_for_process(process_id, exit_status.as_mut_ptr())
-                    });
-                    match result {
-                        Ok(()) => break,
-                        Err(error) => {
-                            if error.raw_os_error() != Some(EINTR) {
-                                return Err(error);
-                            }
+            move || loop {
+                let mut process_info = MaybeUninit::uninit();
+                let result = Self::check_syscall(unsafe {
+                    libc::waitid(
+                        P_PID,
+                        process_id,
+                        process_info.as_mut_ptr(),
+                        WEXITED | WNOWAIT | WSTOPPED,
+                    )
+                });
+                match result {
+                    Ok(()) => {
+                        let process_info =
+                            unsafe { process_info.assume_init() };
+                        break Ok(ExitStatus {
+                            value: unsafe { process_info.si_status() },
+                            terminated: process_info.si_code != CLD_EXITED,
+                        });
+                    }
+                    Err(error) => {
+                        if error.raw_os_error() != Some(EINTR) {
+                            break Err(error);
                         }
                     }
                 }
-                Ok(unsafe { exit_status.assume_init() })
             },
             time_limit,
         )?
