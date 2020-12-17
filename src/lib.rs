@@ -83,11 +83,8 @@ use std::process;
 use std::process::Child;
 use std::time::Duration;
 
-#[cfg(unix)]
-#[path = "unix.rs"]
-mod imp;
-#[cfg(windows)]
-#[path = "windows.rs"]
+#[cfg_attr(unix, path = "unix.rs")]
+#[cfg_attr(windows, path = "windows.rs")]
 mod imp;
 
 mod timeout;

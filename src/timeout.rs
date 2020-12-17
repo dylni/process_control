@@ -115,9 +115,9 @@ r#impl!(OutputTimeout, Child, Output, |timeout: &mut Self| {
 
     return timeout
         .run_wait()?
-        .map(|x| {
+        .map(|status| {
             Ok(Output {
-                status: x,
+                status,
                 stdout: join_reader(stdout_reader)?,
                 stderr: join_reader(stderr_reader)?,
             })
@@ -132,10 +132,10 @@ r#impl!(OutputTimeout, Child, Output, |timeout: &mut Self| {
     {
         source
             .take()
-            .map(|mut x| {
+            .map(|mut source| {
                 thread::Builder::new().spawn(move || {
                     let mut buffer = Vec::new();
-                    let _ = x.read_to_end(&mut buffer)?;
+                    let _ = source.read_to_end(&mut buffer)?;
                     Ok(buffer)
                 })
             })
