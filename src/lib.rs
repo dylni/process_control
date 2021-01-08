@@ -68,7 +68,6 @@
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
 //! [wait-timeout]: https://crates.io/crates/wait-timeout
 
-#![doc(html_root_url = "https://docs.rs/process_control/*")]
 // Only require a nightly compiler when building documentation for docs.rs.
 // This is a private option that should not be used.
 // https://github.com/rust-lang/docs.rs/issues/147#issuecomment-389544407
