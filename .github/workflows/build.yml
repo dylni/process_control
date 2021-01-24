@@ -20,6 +20,23 @@ jobs:
     strategy:
       matrix:
         platform: [ubuntu-latest, windows-latest]
+  build-other:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        fetch-depth: 10
+    - run: rustup install ${{ matrix.version }}
+    - run: rustup default ${{ matrix.version }}
+    - run: rustup component add clippy
+    - run: rustup target add ${{ matrix.target }}
+    - run: cargo clippy --target ${{ matrix.target }} -- -Dwarnings
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        target: [x86_64-unknown-freebsd]
+        version: [1.36.0, stable, beta]
   test:
     needs: [build]
     runs-on: ${{ matrix.platform }}

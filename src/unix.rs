@@ -11,7 +11,7 @@ use std::process::Child;
 use std::thread;
 use std::time::Duration;
 
-use libc::id_t;
+use libc::pid_t;
 use libc::CLD_EXITED;
 use libc::EINTR;
 use libc::ESRCH;
@@ -100,7 +100,7 @@ where
 }
 
 #[derive(Debug)]
-pub(super) struct Handle(id_t);
+pub(super) struct Handle(pid_t);
 
 impl Handle {
     fn check_syscall(result: c_int) -> io::Result<()> {
@@ -111,19 +111,24 @@ impl Handle {
         }
     }
 
+    #[allow(renamed_and_removed_lints)]
+    #[allow(clippy::unknown_clippy_lints)]
+    #[allow(clippy::unnecessary_wraps)]
     pub(super) fn new(process: &Child) -> io::Result<Self> {
         Ok(Self::inherited(process))
     }
 
     pub(super) fn inherited(process: &Child) -> Self {
-        #[allow(clippy::useless_conversion)]
-        Self(process.id().into())
+        Self(
+            process
+                .id()
+                .try_into()
+                .expect("process identifier is invalid"),
+        )
     }
 
     pub(super) unsafe fn terminate(&self) -> io::Result<()> {
-        let process_id =
-            self.0.try_into().expect("process identifier is invalid");
-        let result = Self::check_syscall(libc::kill(process_id, SIGKILL));
+        let result = Self::check_syscall(libc::kill(self.0, SIGKILL));
         if let Err(error) = &result {
             // This error is usually decoded to [ErrorKind::Other]:
             // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/mod.rs#L100-L123
@@ -143,7 +148,10 @@ impl Handle {
     ) -> io::Result<Option<ExitStatus>> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/process/process_unix.rs#L432-L441
 
-        let process_id = self.0;
+        let process_id = self
+            .0
+            .try_into()
+            .expect("process identifier types are incompatible");
         run_with_timeout(
             move || loop {
                 let mut process_info = MaybeUninit::uninit();
