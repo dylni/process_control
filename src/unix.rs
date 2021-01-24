@@ -116,7 +116,8 @@ impl Handle {
     }
 
     pub(super) fn inherited(process: &Child) -> Self {
-        Self(process.id())
+        #[allow(clippy::useless_conversion)]
+        Self(process.id().into())
     }
 
     pub(super) unsafe fn terminate(&self) -> io::Result<()> {
