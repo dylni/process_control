@@ -6,6 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use process_control::ChildExt;
+use process_control::ExitStatus;
 use process_control::Terminator;
 use process_control::Timeout;
 
@@ -53,7 +54,9 @@ fn test_terminate() -> io::Result<()> {
     let mut process = create_process(None)?;
     let terminator = process.terminator()?;
 
-    unsafe { terminator.terminate()? }
+    unsafe {
+        terminator.terminate()?;
+    }
 
     assert_eq!(None, process.try_wait()?.and_then(|x| x.code()));
     assert_terminated(process)?;
@@ -74,7 +77,7 @@ fn test_wait_with_timeout() -> io::Result<()> {
             .with_timeout(FIVE_SECONDS)
             .strict_errors()
             .wait()?
-            .map(|x| x.code()),
+            .map(ExitStatus::code),
     );
     assert_not_found(&terminator);
 
@@ -140,7 +143,7 @@ fn test_wait_with_terminating_timeout() -> io::Result<()> {
             .strict_errors()
             .terminating()
             .wait()?
-            .map(|x| x.code()),
+            .map(ExitStatus::code),
     );
     assert_not_found(&terminator);
 
@@ -217,7 +220,7 @@ fn test_wait_with_stdin() -> io::Result<()> {
             .with_timeout(FIVE_SECONDS)
             .strict_errors()
             .wait()?
-            .map(|x| x.code()),
+            .map(ExitStatus::code),
     );
     assert_not_found(&terminator);
 
