@@ -23,7 +23,7 @@ rustdoc-args = [
 
 [target.'cfg(unix)'.dependencies]
 crossbeam-channel = { version = "0.5", optional = true }
-libc = "0.2.82"
+libc = "0.2.98"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["handleapi", "processthreadsapi", "synchapi", "winbase", "winerror"] }
