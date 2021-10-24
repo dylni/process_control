@@ -3,18 +3,23 @@ name: build
 on:
   pull_request:
   push:
+    branches:
+    - master
   schedule:
   - cron: 0 0 * * FRI
 
 jobs:
   build:
     runs-on: ${{ matrix.platform }}
+    env:
+      RUSTFLAGS: -Dwarnings
     steps:
     - uses: actions/checkout@v1
       with:
         fetch-depth: 10
-    - run: cargo clippy -- -Dwarnings
-    - run: cargo clippy --all-features --tests -- -Dwarnings
+    - run: cargo install cargo-hack
+    - run: cargo hack clippy --feature-powerset --optional-deps
+    - run: cargo hack clippy --feature-powerset --optional-deps --tests
     - run: cargo fmt -- --check
     timeout-minutes: 5
     strategy:
@@ -23,20 +28,33 @@ jobs:
   build-other:
     needs: [build]
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -Dwarnings
+      flags: --feature-powerset --optional-deps --target ${{ matrix.target }}
     steps:
     - uses: actions/checkout@v1
       with:
         fetch-depth: 10
     - run: rustup install ${{ matrix.version }}
     - run: rustup default ${{ matrix.version }}
-    - run: rustup component add clippy
+    # Clippy might not be packaged with the current nightly compiler or might
+    # include broken lints on the nightly channel.
+    #
+    # Running Clippy on older versions prevents taking advantage of
+    # improvements to its lints.
+    - if: matrix.version == 'stable'
+      run: rustup component add clippy
     - run: rustup target add ${{ matrix.target }}
-    - run: cargo clippy --target ${{ matrix.target }} -- -Dwarnings
+    - run: cargo install cargo-hack
+    - if: matrix.version == 'stable'
+      run: cargo hack clippy ${{ env.flags }}
+    - if: matrix.version != 'stable'
+      run: cargo hack rustc ${{ env.flags }}
     timeout-minutes: 5
     strategy:
       matrix:
         target: [x86_64-unknown-freebsd]
-        version: [1.50.0, stable, beta]
+        version: [1.50.0, stable, beta, nightly]
   test:
     needs: [build]
     runs-on: ${{ matrix.platform }}
@@ -48,11 +66,11 @@ jobs:
         fetch-depth: 10
     - run: rustup install ${{ matrix.version }}
     - run: rustup default ${{ matrix.version }}
-    - run: cargo test
+    - run: cargo test --no-default-features
     - run: cargo test --all-features
-    - run: cargo test --release
+    - run: cargo test --all-features --release
     timeout-minutes: 10
     strategy:
       matrix:
         platform: [macos-latest, ubuntu-latest, windows-latest]
-        version: [1.50.0, stable, nightly]
+        version: [1.50.0, stable, beta, nightly]
