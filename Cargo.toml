@@ -3,15 +3,16 @@ name = "process_control"
 version = "3.1.0"
 authors = ["dylni"]
 edition = "2018"
-exclude = [".*", "/rustfmt.toml", "/tests"]
+rust-version = "1.50.0"
 description = """
 Methods for ergonomically running processes with timeouts
 """
-repository = "https://github.com/dylni/process_control"
 readme = "README.md"
+repository = "https://github.com/dylni/process_control"
+license = "MIT OR Apache-2.0"
 keywords = ["kill", "process", "terminate", "timeout", "wait"]
 categories = ["concurrency", "os"]
-license = "MIT OR Apache-2.0"
+exclude = [".*", "/rustfmt.toml", "/tests"]
 
 [package.metadata.docs.rs]
 rustc-args = ["--cfg", "process_control_docs_rs"]

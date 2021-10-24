@@ -89,8 +89,7 @@ macro_rules! r#impl {
                 if self.terminate {
                     // If the process exited normally, identifier reuse might
                     // cause a different process to be terminated.
-                    if let Ok(Some(_)) = result {
-                    } else {
+                    if !matches!(result, Ok(Some(_))) {
                         try_run!(self.process.kill().and(self.process.wait()));
                     }
                 }

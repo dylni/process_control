@@ -40,7 +40,7 @@ pub(super) struct Handle {
 
 impl Handle {
     fn get_handle(process: &Child) -> HANDLE {
-        process.as_raw_handle() as HANDLE
+        process.as_raw_handle().cast()
     }
 
     fn raw_os_error(error: &io::Error) -> Option<DWORD> {
@@ -129,10 +129,8 @@ impl Handle {
     ) -> io::Result<Option<ExitStatus>> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/process.rs#L334-L344
 
-        let time_limit_ms = time_limit
-            .as_millis()
-            .try_into()
-            .unwrap_or_else(|_| DWORD::max_value());
+        let time_limit_ms =
+            time_limit.as_millis().try_into().unwrap_or(DWORD::MAX);
         match unsafe { WaitForSingleObject(self.raw(), time_limit_ms) } {
             WAIT_OBJECT_0 => {}
             WAIT_TIMEOUT => return Ok(None),

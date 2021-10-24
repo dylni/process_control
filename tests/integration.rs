@@ -27,6 +27,7 @@ fn create_stdin_process() -> io::Result<Child> {
     Command::new("perl").stdin(Stdio::piped()).spawn()
 }
 
+#[track_caller]
 fn assert_terminated(mut process: Child) -> io::Result<()> {
     let exit_status = process.wait()?;
     #[cfg(unix)]
@@ -43,6 +44,7 @@ fn assert_terminated(mut process: Child) -> io::Result<()> {
     Ok(())
 }
 
+#[track_caller]
 fn assert_not_found(terminator: &Terminator) {
     assert_eq!(Err(io::ErrorKind::NotFound), unsafe {
         terminator.terminate().map_err(|x| x.kind())
