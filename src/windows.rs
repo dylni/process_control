@@ -30,6 +30,18 @@ type DWORD = u32;
 const TRUE: BOOL = 1;
 const STILL_ACTIVE: DWORD = STATUS_PENDING as DWORD;
 
+fn raw_os_error(error: &io::Error) -> Option<DWORD> {
+    error.raw_os_error().and_then(|x| x.try_into().ok())
+}
+
+fn check_syscall(result: BOOL) -> io::Result<()> {
+    if result == TRUE {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
 #[derive(Debug)]
 struct RawHandle(HANDLE);
 
@@ -39,90 +51,48 @@ unsafe impl Send for RawHandle {}
 unsafe impl Sync for RawHandle {}
 
 #[derive(Debug)]
-pub(super) struct Handle {
-    handle: RawHandle,
-    duplicated: bool,
-}
+pub(super) struct SharedHandle(RawHandle);
 
-impl Handle {
-    fn get_handle(process: &Child) -> HANDLE {
-        process.as_raw_handle()
+impl SharedHandle {
+    pub(super) unsafe fn new(process: &Child) -> Self {
+        Self(RawHandle(process.as_raw_handle()))
     }
 
-    fn raw_os_error(error: &io::Error) -> Option<DWORD> {
-        error.raw_os_error().and_then(|x| x.try_into().ok())
-    }
-
-    fn not_found_error() -> io::Error {
-        io::Error::new(io::ErrorKind::NotFound, "The handle is invalid.")
-    }
-
-    fn check_syscall(result: BOOL) -> io::Result<()> {
-        if result == TRUE {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
-    }
-
-    pub(super) fn new(process: &Child) -> io::Result<Self> {
-        let parent_handle = unsafe { GetCurrentProcess() };
-        let mut handle = ptr::null_mut();
-        Self::check_syscall(unsafe {
-            DuplicateHandle(
-                parent_handle,
-                Self::get_handle(process),
-                parent_handle,
-                &mut handle,
-                0,
-                TRUE,
-                DUPLICATE_SAME_ACCESS,
-            )
-        })?;
-        Ok(Self {
-            handle: RawHandle(handle),
-            duplicated: true,
-        })
-    }
-
-    pub(super) fn inherited(process: &Child) -> Self {
-        Self {
-            handle: RawHandle(Self::get_handle(process)),
-            duplicated: false,
-        }
-    }
-
-    const fn raw(&self) -> HANDLE {
-        self.handle.0
+    #[rustfmt::skip]
+    const fn as_raw(&self) -> HANDLE {
+        self.0.0
     }
 
     fn get_exit_code(&self) -> io::Result<DWORD> {
         let mut exit_code = 0;
-        Self::check_syscall(unsafe {
-            GetExitCodeProcess(self.raw(), &mut exit_code)
+        check_syscall(unsafe {
+            GetExitCodeProcess(self.as_raw(), &mut exit_code)
         })?;
         Ok(exit_code)
     }
 
     pub(super) fn terminate(&self) -> io::Result<()> {
         let result =
-            Self::check_syscall(unsafe { TerminateProcess(self.raw(), 1) });
+            check_syscall(unsafe { TerminateProcess(self.as_raw(), 1) });
         if let Err(error) = &result {
-            if let Some(error_code) = Self::raw_os_error(error) {
-                match error_code {
+            if let Some(error_code) = raw_os_error(error) {
+                let not_found = match error_code {
                     ERROR_ACCESS_DENIED => {
-                        if let Ok(exit_code) = self.get_exit_code() {
-                            if exit_code != STILL_ACTIVE {
-                                return Err(Self::not_found_error());
-                            }
-                        }
+                        matches!(
+                            self.get_exit_code(),
+                            Ok(x) if x != STILL_ACTIVE,
+                        )
                     }
                     // This error is usually decoded to [ErrorKind::Other]:
                     // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/mod.rs#L55-L82
-                    ERROR_INVALID_HANDLE => {
-                        return Err(Self::not_found_error());
-                    }
-                    _ => {}
+                    ERROR_INVALID_HANDLE => true,
+                    _ => false,
+                };
+                if not_found {
+                    return Err(io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "The handle is invalid.",
+                    ));
                 }
             }
         }
@@ -140,7 +110,7 @@ impl Handle {
             let time_limit =
                 remaining_time_limit.try_into().unwrap_or(DWORD::MAX);
 
-            match unsafe { WaitForSingleObject(self.raw(), time_limit) } {
+            match unsafe { WaitForSingleObject(self.as_raw(), time_limit) } {
                 WAIT_OBJECT_0 => {
                     let exit_code = self.get_exit_code()?;
                     return Ok(Some(ExitStatus::from_raw(exit_code)));
@@ -155,10 +125,34 @@ impl Handle {
     }
 }
 
-impl Drop for Handle {
+#[derive(Debug)]
+pub(super) struct DuplicatedHandle(SharedHandle);
+
+impl DuplicatedHandle {
+    pub(super) fn new(process: &Child) -> io::Result<Self> {
+        let parent_handle = unsafe { GetCurrentProcess() };
+        let mut handle = ptr::null_mut();
+        check_syscall(unsafe {
+            DuplicateHandle(
+                parent_handle,
+                process.as_raw_handle(),
+                parent_handle,
+                &mut handle,
+                0,
+                TRUE,
+                DUPLICATE_SAME_ACCESS,
+            )
+        })?;
+        Ok(Self(SharedHandle(RawHandle(handle))))
+    }
+
+    pub(super) const unsafe fn as_inner(&self) -> &SharedHandle {
+        &self.0
+    }
+}
+
+impl Drop for DuplicatedHandle {
     fn drop(&mut self) {
-        if self.duplicated {
-            let _ = unsafe { CloseHandle(self.raw()) };
-        }
+        let _ = unsafe { CloseHandle(self.0.as_raw()) };
     }
 }

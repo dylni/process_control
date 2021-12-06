@@ -92,7 +92,7 @@ mod timeout;
 ///
 /// Instances can only be constructed using [`ChildExt::terminator`].
 #[derive(Debug)]
-pub struct Terminator(imp::Handle);
+pub struct Terminator(imp::DuplicatedHandle);
 
 impl Terminator {
     /// Terminates a process as immediately as the operating system allows.
@@ -140,7 +140,7 @@ impl Terminator {
     /// ```
     #[inline]
     pub unsafe fn terminate(&self) -> io::Result<()> {
-        self.0.terminate()
+        self.0.as_inner().terminate()
     }
 }
 
@@ -362,7 +362,7 @@ impl<'a> ChildExt<'a> for Child {
 
     #[inline]
     fn terminator(&self) -> io::Result<Terminator> {
-        imp::Handle::new(self).map(Terminator)
+        imp::DuplicatedHandle::new(self).map(Terminator)
     }
 
     #[inline]

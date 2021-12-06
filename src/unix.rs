@@ -74,6 +74,14 @@ impl From<process::ExitStatus> for ExitStatus {
     }
 }
 
+fn check_syscall(result: c_int) -> io::Result<()> {
+    if result >= 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
 pub(super) fn run_with_timeout<TReturn>(
     get_result_fn: impl 'static + FnOnce() -> TReturn + Send,
     time_limit: Duration,
@@ -100,25 +108,10 @@ where
 }
 
 #[derive(Debug)]
-pub(super) struct Handle(pid_t);
+pub(super) struct SharedHandle(pid_t);
 
-impl Handle {
-    fn check_syscall(result: c_int) -> io::Result<()> {
-        if result >= 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
-    }
-
-    #[allow(renamed_and_removed_lints)]
-    #[allow(clippy::unknown_clippy_lints)]
-    #[allow(clippy::unnecessary_wraps)]
-    pub(super) fn new(process: &Child) -> io::Result<Self> {
-        Ok(Self::inherited(process))
-    }
-
-    pub(super) fn inherited(process: &Child) -> Self {
+impl SharedHandle {
+    pub(super) unsafe fn new(process: &Child) -> Self {
         Self(
             process
                 .id()
@@ -127,8 +120,8 @@ impl Handle {
         )
     }
 
-    pub(super) unsafe fn terminate(&self) -> io::Result<()> {
-        let result = Self::check_syscall(libc::kill(self.0, SIGKILL));
+    pub(super) fn terminate(&self) -> io::Result<()> {
+        let result = check_syscall(unsafe { libc::kill(self.0, SIGKILL) });
         if let Err(error) = &result {
             // This error is usually decoded to [ErrorKind::Other]:
             // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/mod.rs#L100-L123
@@ -155,7 +148,7 @@ impl Handle {
         run_with_timeout(
             move || loop {
                 let mut process_info = MaybeUninit::uninit();
-                let result = Self::check_syscall(unsafe {
+                let result = check_syscall(unsafe {
                     libc::waitid(
                         P_PID,
                         process_id,
@@ -182,5 +175,21 @@ impl Handle {
             time_limit,
         )?
         .transpose()
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct DuplicatedHandle(SharedHandle);
+
+impl DuplicatedHandle {
+    #[allow(renamed_and_removed_lints)]
+    #[allow(clippy::unknown_clippy_lints)]
+    #[allow(clippy::unnecessary_wraps)]
+    pub(super) fn new(process: &Child) -> io::Result<Self> {
+        Ok(Self(unsafe { SharedHandle::new(process) }))
+    }
+
+    pub(super) const unsafe fn as_inner(&self) -> &SharedHandle {
+        &self.0
     }
 }
