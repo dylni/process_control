@@ -90,7 +90,10 @@ macro_rules! r#impl {
                     // If the process exited normally, identifier reuse might
                     // cause a different process to be terminated.
                     if !matches!(result, Ok(Some(_))) {
-                        try_run!(self.process.kill().and(self.process.wait()));
+                        try_run!(self
+                            .process
+                            .kill()
+                            .and_then(|()| self.process.wait()));
                     }
                 }
                 try_run!(self.process.try_wait());
