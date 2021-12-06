@@ -7,22 +7,28 @@ pub(super) use std::process::ExitStatus;
 use std::ptr;
 use std::time::Duration;
 
-use winapi::shared::minwindef::BOOL;
-use winapi::shared::minwindef::DWORD;
-use winapi::shared::minwindef::TRUE;
-use winapi::shared::winerror::ERROR_ACCESS_DENIED;
-use winapi::shared::winerror::ERROR_INVALID_HANDLE;
-use winapi::shared::winerror::WAIT_TIMEOUT;
-use winapi::um::handleapi::CloseHandle;
-use winapi::um::handleapi::DuplicateHandle;
-use winapi::um::minwinbase::STILL_ACTIVE;
-use winapi::um::processthreadsapi::GetCurrentProcess;
-use winapi::um::processthreadsapi::GetExitCodeProcess;
-use winapi::um::processthreadsapi::TerminateProcess;
-use winapi::um::synchapi::WaitForSingleObject;
-use winapi::um::winbase::WAIT_OBJECT_0;
-use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
-use winapi::um::winnt::HANDLE;
+use windows_sys::Win32::Foundation::CloseHandle;
+use windows_sys::Win32::Foundation::DuplicateHandle;
+use windows_sys::Win32::Foundation::DUPLICATE_SAME_ACCESS;
+use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
+use windows_sys::Win32::Foundation::ERROR_INVALID_HANDLE;
+use windows_sys::Win32::Foundation::HANDLE;
+use windows_sys::Win32::Foundation::STATUS_PENDING;
+use windows_sys::Win32::Foundation::WAIT_TIMEOUT;
+use windows_sys::Win32::System::Threading::GetCurrentProcess;
+use windows_sys::Win32::System::Threading::GetExitCodeProcess;
+use windows_sys::Win32::System::Threading::TerminateProcess;
+use windows_sys::Win32::System::Threading::WaitForSingleObject;
+use windows_sys::Win32::System::Threading::WAIT_OBJECT_0;
+
+// https://github.com/microsoft/windows-rs/issues/881
+#[allow(clippy::upper_case_acronyms)]
+type BOOL = i32;
+#[allow(clippy::upper_case_acronyms)]
+type DWORD = u32;
+
+const TRUE: BOOL = 1;
+const STILL_ACTIVE: DWORD = STATUS_PENDING as DWORD;
 
 #[derive(Debug)]
 struct RawHandle(HANDLE);
@@ -40,7 +46,7 @@ pub(super) struct Handle {
 
 impl Handle {
     fn get_handle(process: &Child) -> HANDLE {
-        process.as_raw_handle().cast()
+        process.as_raw_handle()
     }
 
     fn raw_os_error(error: &io::Error) -> Option<DWORD> {
