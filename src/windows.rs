@@ -135,16 +135,23 @@ impl Handle {
     ) -> io::Result<Option<ExitStatus>> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/process.rs#L334-L344
 
-        let time_limit_ms =
-            time_limit.as_millis().try_into().unwrap_or(DWORD::MAX);
-        match unsafe { WaitForSingleObject(self.raw(), time_limit_ms) } {
-            WAIT_OBJECT_0 => {}
-            WAIT_TIMEOUT => return Ok(None),
-            _ => return Err(io::Error::last_os_error()),
-        }
+        let mut remaining_time_limit = time_limit.as_millis();
+        while remaining_time_limit > 0 {
+            let time_limit =
+                remaining_time_limit.try_into().unwrap_or(DWORD::MAX);
 
-        let exit_code = self.get_exit_code()?;
-        Ok(Some(ExitStatus::from_raw(exit_code)))
+            match unsafe { WaitForSingleObject(self.raw(), time_limit) } {
+                WAIT_OBJECT_0 => {
+                    let exit_code = self.get_exit_code()?;
+                    return Ok(Some(ExitStatus::from_raw(exit_code)));
+                }
+                WAIT_TIMEOUT => {}
+                _ => return Err(io::Error::last_os_error()),
+            }
+
+            remaining_time_limit -= u128::from(time_limit);
+        }
+        Ok(None)
     }
 }
 
