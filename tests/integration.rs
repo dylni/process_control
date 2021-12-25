@@ -6,9 +6,9 @@ use std::thread;
 use std::time::Duration;
 
 use process_control::ChildExt;
+use process_control::Control;
 use process_control::ExitStatus;
 use process_control::Terminator;
-use process_control::Timeout;
 
 const ONE_SECOND: Duration = Duration::from_secs(1);
 
@@ -76,7 +76,8 @@ fn test_wait_with_timeout() -> io::Result<()> {
     assert_eq!(
         Some(Some(0)),
         process
-            .with_timeout(FIVE_SECONDS)
+            .controlled()
+            .time_limit(FIVE_SECONDS)
             .strict_errors()
             .wait()?
             .map(ExitStatus::code),
@@ -93,7 +94,11 @@ fn test_wait_with_timeout_expired() -> io::Result<()> {
 
     assert_eq!(
         None,
-        process.with_timeout(ONE_SECOND).strict_errors().wait()?,
+        process
+            .controlled()
+            .time_limit(ONE_SECOND)
+            .strict_errors()
+            .wait()?,
     );
     thread::sleep(ONE_SECOND);
     unsafe { terminator.terminate() }
@@ -107,7 +112,8 @@ fn test_wait_for_output_with_timeout() -> io::Result<()> {
     assert_eq!(
         Some(Some(0)),
         process
-            .with_output_timeout(FIVE_SECONDS)
+            .controlled_with_output()
+            .time_limit(FIVE_SECONDS)
             .strict_errors()
             .wait()?
             .map(|x| x.status.code()),
@@ -125,7 +131,8 @@ fn test_wait_for_output_with_timeout_expired() -> io::Result<()> {
     assert_eq!(
         None,
         process
-            .with_output_timeout(ONE_SECOND)
+            .controlled_with_output()
+            .time_limit(ONE_SECOND)
             .strict_errors()
             .wait()?,
     );
@@ -141,7 +148,8 @@ fn test_wait_with_terminating_timeout() -> io::Result<()> {
     assert_eq!(
         Some(Some(0)),
         process
-            .with_timeout(FIVE_SECONDS)
+            .controlled()
+            .time_limit(FIVE_SECONDS)
             .strict_errors()
             .terminating()
             .wait()?
@@ -160,7 +168,8 @@ fn test_wait_with_terminating_timeout_expired() -> io::Result<()> {
     assert_eq!(
         None,
         process
-            .with_timeout(ONE_SECOND)
+            .controlled()
+            .time_limit(ONE_SECOND)
             .strict_errors()
             .terminating()
             .wait()?,
@@ -181,7 +190,8 @@ fn test_wait_for_output_with_terminating_timeout() -> io::Result<()> {
     assert_eq!(
         Some(Some(0)),
         process
-            .with_output_timeout(FIVE_SECONDS)
+            .controlled_with_output()
+            .time_limit(FIVE_SECONDS)
             .strict_errors()
             .terminating()
             .wait()?
@@ -200,7 +210,8 @@ fn test_wait_for_output_with_terminating_timeout_expired() -> io::Result<()> {
     assert_eq!(
         None,
         process
-            .with_output_timeout(ONE_SECOND)
+            .controlled_with_output()
+            .time_limit(ONE_SECOND)
             .strict_errors()
             .terminating()
             .wait()?,
@@ -219,7 +230,8 @@ fn test_wait_with_stdin() -> io::Result<()> {
     assert_eq!(
         Some(Some(0)),
         process
-            .with_timeout(FIVE_SECONDS)
+            .controlled()
+            .time_limit(FIVE_SECONDS)
             .strict_errors()
             .wait()?
             .map(ExitStatus::code),
@@ -237,7 +249,8 @@ fn test_wait_for_output_with_stdin() -> io::Result<()> {
     assert_eq!(
         Some(Some(0)),
         process
-            .with_output_timeout(FIVE_SECONDS)
+            .controlled_with_output()
+            .time_limit(FIVE_SECONDS)
             .strict_errors()
             .wait()?
             .map(|x| x.status.code()),
@@ -269,7 +282,8 @@ fn test_large_output() -> io::Result<()> {
         .spawn()?;
 
     let output = process
-        .with_output_timeout(FIVE_SECONDS)
+        .controlled_with_output()
+        .time_limit(FIVE_SECONDS)
         .strict_errors()
         .wait()?
         .unwrap();

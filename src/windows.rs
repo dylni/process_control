@@ -20,6 +20,7 @@ use windows_sys::Win32::System::Threading::GetExitCodeProcess;
 use windows_sys::Win32::System::Threading::TerminateProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 use windows_sys::Win32::System::Threading::WAIT_OBJECT_0;
+use windows_sys::Win32::System::WindowsProgramming::INFINITE;
 
 // https://github.com/microsoft/windows-rs/issues/881
 #[allow(clippy::upper_case_acronyms)]
@@ -51,16 +52,21 @@ unsafe impl Send for RawHandle {}
 unsafe impl Sync for RawHandle {}
 
 #[derive(Debug)]
-pub(super) struct SharedHandle(RawHandle);
+pub(super) struct SharedHandle {
+    handle: RawHandle,
+    pub(super) time_limit: Option<Duration>,
+}
 
 impl SharedHandle {
     pub(super) unsafe fn new(process: &Child) -> Self {
-        Self(RawHandle(process.as_raw_handle()))
+        Self {
+            handle: RawHandle(process.as_raw_handle()),
+            time_limit: None,
+        }
     }
 
-    #[rustfmt::skip]
     const fn as_raw(&self) -> HANDLE {
-        self.0.0
+        self.handle.0
     }
 
     fn get_exit_code(&self) -> io::Result<DWORD> {
@@ -99,13 +105,13 @@ impl SharedHandle {
         result
     }
 
-    pub(super) fn wait_with_timeout(
-        &self,
-        time_limit: Duration,
-    ) -> io::Result<Option<ExitStatus>> {
+    pub(super) fn wait(&mut self) -> io::Result<Option<ExitStatus>> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/process.rs#L334-L344
 
-        let mut remaining_time_limit = time_limit.as_millis();
+        let mut remaining_time_limit = self
+            .time_limit
+            .map(|x| x.as_millis())
+            .unwrap_or_else(|| INFINITE.into());
         while remaining_time_limit > 0 {
             let time_limit =
                 remaining_time_limit.try_into().unwrap_or(DWORD::MAX);
@@ -143,7 +149,10 @@ impl DuplicatedHandle {
                 DUPLICATE_SAME_ACCESS,
             )
         })?;
-        Ok(Self(SharedHandle(RawHandle(handle))))
+        Ok(Self(SharedHandle {
+            handle: RawHandle(handle),
+            time_limit: None,
+        }))
     }
 
     pub(super) const unsafe fn as_inner(&self) -> &SharedHandle {

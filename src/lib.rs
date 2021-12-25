@@ -1,13 +1,19 @@
-//! This crate allows running a process with a timeout, with the option to
-//! terminate it automatically afterward. The latter is surprisingly difficult
-//! to achieve on Unix, since process identifiers can be arbitrarily reassigned
-//! when no longer used. Thus, it would be extremely easy to inadvertently
-//! terminate an unexpected process. This crate protects against that
-//! possibility.
+//! This crate allows running a process with resource limits, such as a time,
+//! and the option to terminate it automatically afterward. The latter is
+//! surprisingly difficult to achieve on Unix, since process identifiers can be
+//! arbitrarily reassigned when no longer used. Thus, it would be extremely
+//! easy to inadvertently terminate an unexpected process. This crate protects
+//! against that possibility.
 //!
-//! Methods for creating timeouts are available on [`ChildExt`], which is
+//! Methods for setting limits are available on [`ChildExt`], which is
 //! implemented for [`Child`]. They each return a builder of options to
-//! configure how the timeout should be applied.
+//! configure how the limit should be applied.
+//!
+//! <div style="background:rgba(255,181,77,0.16); padding:0.75em;">
+//! <strong>Warning</strong>: This crate should not be used for security. There
+//! are many ways that a process can bypass resource limits. The limits are
+//! only intended for simple restriction of harmless processes.
+//! </div>
 //!
 //! # Implementation
 //!
@@ -44,7 +50,7 @@
 //! use std::time::Duration;
 //!
 //! use process_control::ChildExt;
-//! use process_control::Timeout;
+//! use process_control::Control;
 //!
 //! let process = Command::new("echo")
 //!     .arg("hello")
@@ -52,7 +58,8 @@
 //!     .spawn()?;
 //!
 //! let output = process
-//!     .with_output_timeout(Duration::from_secs(1))
+//!     .controlled_with_output()
+//!     .time_limit(Duration::from_secs(1))
 //!     .terminating()
 //!     .wait()?
 //!     .ok_or_else(|| {
@@ -68,6 +75,7 @@
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
 //! [wait-timeout]: https://crates.io/crates/wait-timeout
 
+#![allow(deprecated)]
 // Only require a nightly compiler when building documentation for docs.rs.
 // This is a private option that should not be used.
 // https://github.com/rust-lang/docs.rs/issues/147#issuecomment-389544407
@@ -82,11 +90,11 @@ use std::process;
 use std::process::Child;
 use std::time::Duration;
 
+mod control;
+
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
 mod imp;
-
-mod timeout;
 
 /// A wrapper that stores enough information to terminate a process.
 ///
@@ -216,12 +224,22 @@ impl From<process::Output> for Output {
     }
 }
 
-/// A temporary wrapper for a process timeout.
-pub trait Timeout: private::Sealed {
+/// A temporary wrapper for process limits.
+#[must_use]
+pub trait Control: private::Sealed {
     /// The type returned by [`wait`].
     ///
     /// [`wait`]: Self::wait
     type Result;
+
+    /// Sets the total time limit for the process in milliseconds.
+    ///
+    /// A process that exceeds this limit will not be terminated unless
+    /// [`terminating`] is called.
+    ///
+    /// [`terminating`]: Self::terminating
+    #[must_use]
+    fn time_limit(self, limit: Duration) -> Self;
 
     /// Causes [`wait`] to never suppress an error.
     ///
@@ -238,6 +256,57 @@ pub trait Timeout: private::Sealed {
     /// Process identifier reuse by the system will be mitigated. There should
     /// never be a scenario that causes an unintended process to be terminated.
     #[must_use]
+    fn terminating(self) -> Self;
+
+    /// Runs the process to completion, aborting if it exceeds the time limit.
+    ///
+    /// At least one additional thread might be created to wait on the process
+    /// without blocking the current thread.
+    ///
+    /// If the time limit is exceeded before the process finishes, `Ok(None)`
+    /// will be returned. However, the process will not be terminated in that
+    /// case unless [`terminating`] is called beforehand. It is recommended to
+    /// always call that method to allow system resources to be freed.
+    ///
+    /// The stdin handle to the process, if it exists, will be closed before
+    /// waiting. Otherwise, the process would assuredly time out when reading
+    /// from that pipe.
+    ///
+    /// This method cannot guarantee that the same [`io::ErrorKind`] variants
+    /// will be returned in the future for the same types of failures. Allowing
+    /// these breakages is required to enable calling [`Child::kill`]
+    /// internally.
+    ///
+    /// [`terminating`]: Self::terminating
+    fn wait(self) -> io::Result<Option<Self::Result>>;
+}
+
+/// A temporary wrapper for a process timeout.
+#[deprecated = "use `Control` instead"]
+pub trait Timeout: private::Sealed {
+    /// The type returned by [`wait`].
+    ///
+    /// [`wait`]: Self::wait
+    #[deprecated = "use `Control::Result` instead"]
+    type Result;
+
+    /// Causes [`wait`] to never suppress an error.
+    ///
+    /// Typically, errors terminating the process will be ignored, as they are
+    /// often less important than the result. However, when this method is
+    /// called, those errors will be returned as well.
+    ///
+    /// [`wait`]: Self::wait
+    #[must_use]
+    #[deprecated = "use `Control::strict_errors` instead"]
+    fn strict_errors(self) -> Self;
+
+    /// Causes the process to be terminated if it exceeds the time limit.
+    ///
+    /// Process identifier reuse by the system will be mitigated. There should
+    /// never be a scenario that causes an unintended process to be terminated.
+    #[must_use]
+    #[deprecated = "use `Control::terminating` instead"]
     fn terminating(self) -> Self;
 
     /// Runs the process to completion, aborting if it exceeds the time limit.
@@ -260,6 +329,7 @@ pub trait Timeout: private::Sealed {
     /// internally.
     ///
     /// [`terminating`]: Self::terminating
+    #[deprecated = "use `Control::wait` instead"]
     fn wait(self) -> io::Result<Option<Self::Result>>;
 }
 
@@ -267,14 +337,26 @@ pub trait Timeout: private::Sealed {
 ///
 /// For more information, see [the module-level documentation][crate].
 pub trait ChildExt<'a>: private::Sealed {
+    /// The type returned by [`controlled`].
+    ///
+    /// [`controlled`]: Self::controlled
+    type ExitStatusControl: 'a + Control<Result = ExitStatus>;
+
+    /// The type returned by [`controlled_with_output`].
+    ///
+    /// [`controlled_with_output`]: Self::controlled_with_output
+    type OutputControl: Control<Result = Output>;
+
     /// The type returned by [`with_timeout`].
     ///
     /// [`with_timeout`]: Self::with_timeout
+    #[deprecated = "use `ExitStatusControl` instead"]
     type ExitStatusTimeout: 'a + Timeout<Result = ExitStatus>;
 
     /// The type returned by [`with_output_timeout`].
     ///
     /// [`with_output_timeout`]: Self::with_output_timeout
+    #[deprecated = "use `OutputControl` instead"]
     type OutputTimeout: Timeout<Result = Output>;
 
     /// Creates an instance of [`Terminator`] for this process.
@@ -293,6 +375,66 @@ pub trait ChildExt<'a>: private::Sealed {
     /// # Ok::<_, io::Error>(())
     /// ```
     fn terminator(&self) -> io::Result<Terminator>;
+
+    /// Creates an instance of [`Control`] that yields [`ExitStatus`] for this
+    /// process.
+    ///
+    /// This method parallels [`Child::wait`] but allows setting limits on the
+    /// process.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::io;
+    /// use std::process::Command;
+    /// use std::time::Duration;
+    ///
+    /// use process_control::ChildExt;
+    /// use process_control::Control;
+    ///
+    /// let exit_status = Command::new("echo")
+    ///     .spawn()?
+    ///     .controlled()
+    ///     .time_limit(Duration::from_secs(1))
+    ///     .terminating()
+    ///     .wait()?
+    ///     .expect("process timed out");
+    /// assert!(exit_status.success());
+    /// #
+    /// # Ok::<_, io::Error>(())
+    /// ```
+    #[must_use]
+    fn controlled(&'a mut self) -> Self::ExitStatusControl;
+
+    /// Creates an instance of [`Control`] that yields [`Output`] for this
+    /// process.
+    ///
+    /// This method parallels [`Child::wait_with_output`] but allows setting
+    /// limits on the process.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::io;
+    /// use std::process::Command;
+    /// use std::time::Duration;
+    ///
+    /// use process_control::ChildExt;
+    /// use process_control::Control;
+    ///
+    /// let output = Command::new("echo")
+    ///     .spawn()?
+    ///     .controlled_with_output()
+    ///     .time_limit(Duration::from_secs(1))
+    ///     .terminating()
+    ///     .wait()?
+    ///     .expect("process timed out");
+    /// assert!(output.status.success());
+    /// #
+    /// # Ok::<_, io::Error>(())
+    /// ```
+    #[must_use]
+    fn controlled_with_output(self) -> Self::OutputControl;
 
     /// Creates an instance of [`Timeout`] that yields [`ExitStatus`] for this
     /// process.
@@ -320,6 +462,7 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
+    #[deprecated = "use `controlled` instead"]
     #[must_use]
     fn with_timeout(
         &'a mut self,
@@ -352,17 +495,33 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
+    #[deprecated = "use `controlled_with_timeout` instead"]
     #[must_use]
     fn with_output_timeout(self, time_limit: Duration) -> Self::OutputTimeout;
 }
 
 impl<'a> ChildExt<'a> for Child {
-    type ExitStatusTimeout = timeout::ExitStatusTimeout<'a>;
-    type OutputTimeout = timeout::OutputTimeout;
+    type ExitStatusControl = control::ExitStatusControl<'a>;
+
+    type OutputControl = control::OutputControl;
+
+    type ExitStatusTimeout = control::ExitStatusTimeout<'a>;
+
+    type OutputTimeout = control::OutputTimeout;
 
     #[inline]
     fn terminator(&self) -> io::Result<Terminator> {
         imp::DuplicatedHandle::new(self).map(Terminator)
+    }
+
+    #[inline]
+    fn controlled(&'a mut self) -> Self::ExitStatusControl {
+        Self::ExitStatusControl::new(self)
+    }
+
+    #[inline]
+    fn controlled_with_output(self) -> Self::OutputControl {
+        Self::OutputControl::new(self)
     }
 
     #[inline]
@@ -382,10 +541,12 @@ impl<'a> ChildExt<'a> for Child {
 mod private {
     use std::process::Child;
 
-    use super::timeout;
+    use super::control;
 
     pub trait Sealed {}
     impl Sealed for Child {}
-    impl Sealed for timeout::ExitStatusTimeout<'_> {}
-    impl Sealed for timeout::OutputTimeout {}
+    impl Sealed for control::ExitStatusControl<'_> {}
+    impl Sealed for control::ExitStatusTimeout<'_> {}
+    impl Sealed for control::OutputControl {}
+    impl Sealed for control::OutputTimeout {}
 }

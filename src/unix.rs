@@ -84,7 +84,7 @@ fn check_syscall(result: c_int) -> io::Result<()> {
 
 pub(super) fn run_with_timeout<TReturn>(
     get_result_fn: impl 'static + FnOnce() -> TReturn + Send,
-    time_limit: Duration,
+    time_limit: Option<Duration>,
 ) -> io::Result<Option<TReturn>>
 where
     TReturn: 'static + Send,
@@ -104,24 +104,32 @@ where
     let _ = thread::Builder::new()
         .spawn(move || result_sender.send(get_result_fn()))?;
 
-    Ok(result_receiver.recv_timeout(time_limit).ok())
+    Ok(time_limit
+        .map(|x| result_receiver.recv_timeout(x).ok())
+        .unwrap_or_else(|| {
+            Some(result_receiver.recv().expect("channel was disconnected"))
+        }))
 }
 
 #[derive(Debug)]
-pub(super) struct SharedHandle(pid_t);
+pub(super) struct SharedHandle {
+    pid: pid_t,
+    pub(super) time_limit: Option<Duration>,
+}
 
 impl SharedHandle {
     pub(super) unsafe fn new(process: &Child) -> Self {
-        Self(
-            process
+        Self {
+            pid: process
                 .id()
                 .try_into()
                 .expect("process identifier is invalid"),
-        )
+            time_limit: None,
+        }
     }
 
     pub(super) fn terminate(&self) -> io::Result<()> {
-        let result = check_syscall(unsafe { libc::kill(self.0, SIGKILL) });
+        let result = check_syscall(unsafe { libc::kill(self.pid, SIGKILL) });
         if let Err(error) = &result {
             // This error is usually decoded to [ErrorKind::Other]:
             // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/mod.rs#L100-L123
@@ -135,14 +143,11 @@ impl SharedHandle {
         result
     }
 
-    pub(super) fn wait_with_timeout(
-        &self,
-        time_limit: Duration,
-    ) -> io::Result<Option<ExitStatus>> {
+    pub(super) fn wait(&mut self) -> io::Result<Option<ExitStatus>> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/process/process_unix.rs#L432-L441
 
         let process_id = self
-            .0
+            .pid
             .try_into()
             .expect("process identifier types are incompatible");
         run_with_timeout(
@@ -172,7 +177,7 @@ impl SharedHandle {
                     }
                 }
             },
-            time_limit,
+            self.time_limit,
         )?
         .transpose()
     }

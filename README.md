@@ -1,14 +1,19 @@
 # Process Control
 
-This crate allows running a process with a timeout, with the option to
-terminate it automatically afterward. The latter is surprisingly difficult to
-achieve on Unix, since process identifiers can be arbitrarily reassigned when
-no longer used. Thus, it would be extremely easy to inadvertently terminate an
-unexpected process. This crate protects against that possibility.
+This crate allows running a process with resource limits, such as a time, and
+the option to terminate it automatically afterward. The latter is surprisingly
+difficult to achieve on Unix, since process identifiers can be arbitrarily
+reassigned when no longer used. Thus, it would be extremely easy to
+inadvertently terminate an unexpected process. This crate protects against that
+possibility.
 
-Methods for creating timeouts are available on [`ChildExt`], which is
-implemented for [`Child`]. They each return a builder of options to configure
-how the timeout should be applied.
+Methods for setting limits are available on [`ChildExt`], which is implemented
+for [`Child`]. They each return a builder of options to configure how the limit
+should be applied.
+
+***Warning****: This crate should not be used for security. There are
+many ways that a process can bypass resource limits. The limits are only
+intended for simple restriction of harmless processes.*
 
 [![GitHub Build Status](https://github.com/dylni/process_control/workflows/build/badge.svg?branch=master)](https://github.com/dylni/process_control/actions?query=branch%3Amaster)
 
