@@ -182,8 +182,6 @@ impl SharedHandle {
 pub(super) struct DuplicatedHandle(SharedHandle);
 
 impl DuplicatedHandle {
-    #[allow(renamed_and_removed_lints)]
-    #[allow(clippy::unknown_clippy_lints)]
     #[allow(clippy::unnecessary_wraps)]
     pub(super) fn new(process: &Child) -> io::Result<Self> {
         Ok(Self(unsafe { SharedHandle::new(process) }))
