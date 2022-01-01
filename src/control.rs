@@ -25,7 +25,7 @@ macro_rules! r#impl {
             process: $process_type,
             handle: imp::SharedHandle,
             strict_errors: bool,
-            terminate: bool,
+            terminate_for_timeout: bool,
         }
 
         impl$(<$lifetime>)? $struct$(<$lifetime>)? {
@@ -35,7 +35,7 @@ macro_rules! r#impl {
                     handle: unsafe { imp::SharedHandle::new(&process) },
                     process,
                     strict_errors: false,
-                    terminate: false,
+                    terminate_for_timeout: false,
                 }
             }
 
@@ -54,6 +54,12 @@ macro_rules! r#impl {
             type Result = $return_type;
 
             #[inline]
+            fn memory_limit(mut self, limit: usize) -> Self {
+                self.handle.memory_limit = Some(limit);
+                self
+            }
+
+            #[inline]
             fn time_limit(mut self, limit: Duration) -> Self {
                 self.handle.time_limit = Some(limit);
                 self
@@ -66,8 +72,8 @@ macro_rules! r#impl {
             }
 
             #[inline]
-            fn terminating(mut self) -> Self {
-                self.terminate = true;
+            fn terminate_for_timeout(mut self) -> Self {
+                self.terminate_for_timeout = true;
                 self
             }
 
@@ -87,7 +93,7 @@ macro_rules! r#impl {
                     };
                 }
 
-                if self.terminate {
+                if self.terminate_for_timeout {
                     // If the process exited normally, identifier reuse might
                     // cause a different process to be terminated.
                     if !matches!(result, Ok(Some(_))) {
@@ -133,7 +139,7 @@ macro_rules! r#impl {
 
             #[inline]
             fn terminating(self) -> Self {
-                Self(self.0.terminating())
+                Self(self.0.terminate_for_timeout())
             }
 
             #[inline]

@@ -151,7 +151,7 @@ fn test_wait_with_terminating_timeout() -> io::Result<()> {
             .controlled()
             .time_limit(FIVE_SECONDS)
             .strict_errors()
-            .terminating()
+            .terminate_for_timeout()
             .wait()?
             .map(ExitStatus::code),
     );
@@ -171,7 +171,7 @@ fn test_wait_with_terminating_timeout_expired() -> io::Result<()> {
             .controlled()
             .time_limit(ONE_SECOND)
             .strict_errors()
-            .terminating()
+            .terminate_for_timeout()
             .wait()?,
     );
     thread::sleep(ONE_SECOND);
@@ -193,7 +193,7 @@ fn test_wait_for_output_with_terminating_timeout() -> io::Result<()> {
             .controlled_with_output()
             .time_limit(FIVE_SECONDS)
             .strict_errors()
-            .terminating()
+            .terminate_for_timeout()
             .wait()?
             .map(|x| x.status.code()),
     );
@@ -213,7 +213,7 @@ fn test_wait_for_output_with_terminating_timeout_expired() -> io::Result<()> {
             .controlled_with_output()
             .time_limit(ONE_SECOND)
             .strict_errors()
-            .terminating()
+            .terminate_for_timeout()
             .wait()?,
     );
     thread::sleep(ONE_SECOND);

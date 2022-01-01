@@ -60,7 +60,7 @@
 //! let output = process
 //!     .controlled_with_output()
 //!     .time_limit(Duration::from_secs(1))
-//!     .terminating()
+//!     .terminate_for_timeout()
 //!     .wait()?
 //!     .ok_or_else(|| {
 //!         io::Error::new(io::ErrorKind::TimedOut, "Process timed out")
@@ -148,7 +148,7 @@ impl Terminator {
     /// ```
     #[inline]
     pub unsafe fn terminate(&self) -> io::Result<()> {
-        self.0.as_inner().terminate()
+        self.0.terminate()
     }
 }
 
@@ -232,12 +232,23 @@ pub trait Control: private::Sealed {
     /// [`wait`]: Self::wait
     type Result;
 
+    /// Sets the total virtual memory limit for the process in bytes.
+    ///
+    /// If the process attempts to allocate memory in excess of this limit, the
+    /// allocation will fail. The type of failure will depend on the platform,
+    /// and the process might terminate if it cannot handle it.
+    ///
+    /// Small memory limits are safe, but they might prevent the operating
+    /// system from starting the process.
+    #[must_use]
+    fn memory_limit(self, limit: usize) -> Self;
+
     /// Sets the total time limit for the process in milliseconds.
     ///
     /// A process that exceeds this limit will not be terminated unless
-    /// [`terminating`] is called.
+    /// [`terminate_for_timeout`] is called.
     ///
-    /// [`terminating`]: Self::terminating
+    /// [`terminate_for_timeout`]: Self::terminate_for_timeout
     #[must_use]
     fn time_limit(self, limit: Duration) -> Self;
 
@@ -256,7 +267,7 @@ pub trait Control: private::Sealed {
     /// Process identifier reuse by the system will be mitigated. There should
     /// never be a scenario that causes an unintended process to be terminated.
     #[must_use]
-    fn terminating(self) -> Self;
+    fn terminate_for_timeout(self) -> Self;
 
     /// Runs the process to completion, aborting if it exceeds the time limit.
     ///
@@ -265,8 +276,9 @@ pub trait Control: private::Sealed {
     ///
     /// If the time limit is exceeded before the process finishes, `Ok(None)`
     /// will be returned. However, the process will not be terminated in that
-    /// case unless [`terminating`] is called beforehand. It is recommended to
-    /// always call that method to allow system resources to be freed.
+    /// case unless [`terminate_for_timeout`] is called beforehand. It is
+    /// recommended to always call that method to allow system resources to be
+    /// freed.
     ///
     /// The stdin handle to the process, if it exists, will be closed before
     /// waiting. Otherwise, the process would assuredly time out when reading
@@ -277,7 +289,7 @@ pub trait Control: private::Sealed {
     /// these breakages is required to enable calling [`Child::kill`]
     /// internally.
     ///
-    /// [`terminating`]: Self::terminating
+    /// [`terminate_for_timeout`]: Self::terminate_for_timeout
     fn wait(self) -> io::Result<Option<Self::Result>>;
 }
 
@@ -306,7 +318,7 @@ pub trait Timeout: private::Sealed {
     /// Process identifier reuse by the system will be mitigated. There should
     /// never be a scenario that causes an unintended process to be terminated.
     #[must_use]
-    #[deprecated = "use `Control::terminating` instead"]
+    #[deprecated = "use `Control::terminate_for_timeout` instead"]
     fn terminating(self) -> Self;
 
     /// Runs the process to completion, aborting if it exceeds the time limit.
@@ -396,7 +408,7 @@ pub trait ChildExt<'a>: private::Sealed {
     ///     .spawn()?
     ///     .controlled()
     ///     .time_limit(Duration::from_secs(1))
-    ///     .terminating()
+    ///     .terminate_for_timeout()
     ///     .wait()?
     ///     .expect("process timed out");
     /// assert!(exit_status.success());
@@ -426,7 +438,7 @@ pub trait ChildExt<'a>: private::Sealed {
     ///     .spawn()?
     ///     .controlled_with_output()
     ///     .time_limit(Duration::from_secs(1))
-    ///     .terminating()
+    ///     .terminate_for_timeout()
     ///     .wait()?
     ///     .expect("process timed out");
     /// assert!(output.status.success());
