@@ -200,8 +200,8 @@ impl ExitStatus {
 
 impl Display for ExitStatus {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        self.0.fmt(formatter)
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -539,7 +539,8 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
-    #[deprecated = "use `controlled_with_timeout` instead"]
+    #[deprecated = "use `controlled_with_output` and `Control::time_limit` \
+                    instead"]
     #[must_use]
     fn with_output_timeout(self, time_limit: Duration) -> Self::OutputTimeout;
 }

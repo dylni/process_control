@@ -40,16 +40,16 @@ type LimitResource = __rlimit_resource_t;
 #[repr(C)]
 pub(super) struct ExitStatus {
     value: c_int,
-    terminated: bool,
+    exited: bool,
 }
 
 impl ExitStatus {
     pub(super) const fn success(self) -> bool {
-        !self.terminated && self.value == 0
+        self.exited && self.value == 0
     }
 
-    fn get_value(self, normal_exit: bool) -> Option<c_int> {
-        (self.terminated ^ normal_exit).then(|| self.value)
+    fn get_value(self, exit: bool) -> Option<c_int> {
+        (self.exited == exit).then(|| self.value)
     }
 
     pub(super) fn code(self) -> Option<c_int> {
@@ -62,11 +62,11 @@ impl ExitStatus {
 }
 
 impl Display for ExitStatus {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        if self.terminated {
-            write!(formatter, "signal: {}", self.value)
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.exited {
+            write!(f, "exit code: {}", self.value)
         } else {
-            write!(formatter, "exit code: {}", self.value)
+            write!(f, "signal: {}", self.value)
         }
     }
 }
@@ -76,12 +76,12 @@ impl From<process::ExitStatus> for ExitStatus {
         if let Some(exit_code) = value.code() {
             Self {
                 value: exit_code,
-                terminated: false,
+                exited: true,
             }
         } else if let Some(signal) = value.signal() {
             Self {
                 value: signal,
-                terminated: true,
+                exited: false,
             }
         } else {
             unreachable!()
@@ -97,12 +97,13 @@ fn check_syscall(result: c_int) -> io::Result<()> {
     }
 }
 
-pub(super) fn run_with_timeout<TReturn>(
-    get_result_fn: impl 'static + FnOnce() -> TReturn + Send,
+pub(super) fn run_with_time_limit<F, R>(
+    run_fn: F,
     time_limit: Option<Duration>,
-) -> io::Result<Option<TReturn>>
+) -> io::Result<Option<R>>
 where
-    TReturn: 'static + Send,
+    F: 'static + FnOnce() -> R + Send,
+    R: 'static + Send,
 {
     let (result_sender, result_receiver) = {
         #[cfg(feature = "crossbeam-channel")]
@@ -116,8 +117,8 @@ where
             mpsc::channel()
         }
     };
-    let _ = thread::Builder::new()
-        .spawn(move || result_sender.send(get_result_fn()))?;
+    let _ =
+        thread::Builder::new().spawn(move || result_sender.send(run_fn()))?;
 
     Ok(time_limit
         .map(|x| result_receiver.recv_timeout(x).ok())
@@ -216,7 +217,7 @@ impl SharedHandle {
         }
 
         let pid = self.pid.0;
-        run_with_timeout(
+        run_with_time_limit(
             move || loop {
                 let mut process_info = MaybeUninit::uninit();
                 #[cfg_attr(
@@ -237,7 +238,7 @@ impl SharedHandle {
                             unsafe { process_info.assume_init() };
                         break Ok(ExitStatus {
                             value: unsafe { process_info.si_status() },
-                            terminated: process_info.si_code != CLD_EXITED,
+                            exited: process_info.si_code == CLD_EXITED,
                         });
                     }
                     Err(error) => {

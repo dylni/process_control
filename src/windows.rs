@@ -45,7 +45,7 @@ type BOOL = i32;
 type DWORD = u32;
 
 const EXIT_SUCCESS: DWORD = 0;
-const STILL_ACTIVE: DWORD = STATUS_PENDING as DWORD;
+const STILL_ACTIVE: DWORD = STATUS_PENDING as _;
 const TRUE: BOOL = 1;
 
 trait ReplaceNone<T> {
