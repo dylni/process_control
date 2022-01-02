@@ -10,25 +10,22 @@ use process_control::Control;
 use process_control::ExitStatus;
 use process_control::Terminator;
 
-const ONE_SECOND: Duration = Duration::from_secs(1);
+const ONE_SECOND: Duration = Duration::from_secs(2);
 
 const FIVE_SECONDS: Duration = Duration::from_secs(5);
 
-fn create_process(running_time: Option<Duration>) -> io::Result<Child> {
-    Command::new("perl")
+fn create_command(running_time: Duration) -> Command {
+    let mut command = Command::new("perl");
+    let _ = command
         .arg("-e")
         .arg("sleep $ARGV[0]")
         .arg("--")
-        .arg(running_time.unwrap_or(FIVE_SECONDS).as_secs().to_string())
-        .spawn()
-}
-
-fn create_stdin_process() -> io::Result<Child> {
-    Command::new("perl").stdin(Stdio::piped()).spawn()
+        .arg(running_time.as_secs().to_string());
+    command
 }
 
 #[track_caller]
-fn assert_terminated(mut process: Child) -> io::Result<()> {
+fn assert_terminated(process: &mut Child) -> io::Result<()> {
     let exit_status = process.wait()?;
     #[cfg(unix)]
     {
@@ -45,15 +42,75 @@ fn assert_terminated(mut process: Child) -> io::Result<()> {
 }
 
 #[track_caller]
-fn assert_not_found(terminator: &Terminator) {
-    assert_eq!(Err(io::ErrorKind::NotFound), unsafe {
-        terminator.terminate().map_err(|x| x.kind())
-    });
+unsafe fn assert_not_found(terminator: &Terminator) {
+    assert_eq!(
+        Err(io::ErrorKind::NotFound),
+        terminator.terminate().map_err(|x| x.kind()),
+    );
+}
+
+macro_rules! test {
+    ( command: $command:expr , $($token:tt)* ) => {{
+        test!(@output $command, controlled, $($token)*);
+        test!(@output $command, controlled_with_output, $($token)*);
+        Ok(())
+    }};
+    (
+        @output
+        $command:expr ,
+        $method:ident ,
+        $type:ident : $limit:expr ,
+        $($token:tt)*
+    ) => {{
+        let mut terminator;
+        test!(
+            @$type
+            {
+                let process = $command.spawn()?;
+                terminator = process.terminator()?;
+                process
+            }.$method(),
+            $limit,
+            terminator,
+            $($token)*
+        );
+    }};
+    ( @time_limit $control:expr , $limit:expr , $($token:tt)* ) => {{
+        test!(@strict_errors $control.time_limit($limit), $($token)*);
+    }};
+    ( @strict_errors $control:expr , $($token:tt)* ) => {{
+        test!($control, $($token)*);
+        test!($control.strict_errors(), $($token)*);
+    }};
+    ( $control:expr , $terminator:expr , terminating: true, $($token:tt)* ) =>
+    {{
+        test!(
+            $control.terminate_for_timeout(),
+            $terminator,
+            terminating: false,
+            $($token)*
+        );
+    }};
+    (
+        $control:expr ,
+        $terminator:expr ,
+        terminating: false ,
+        expected_result: $expected_result:expr ,
+        run: | $terminator_var:ident | $body:expr ,
+    ) => {{
+        assert_eq!(
+            $expected_result,
+            $control.wait()?.map(|x| ExitStatus::from(x).code()),
+        );
+
+        let $terminator_var = &$terminator;
+        let _: () = $body;
+    }};
 }
 
 #[test]
 fn test_terminate() -> io::Result<()> {
-    let mut process = create_process(None)?;
+    let mut process = create_command(FIVE_SECONDS).spawn()?;
     let terminator = process.terminator()?;
 
     unsafe {
@@ -61,203 +118,74 @@ fn test_terminate() -> io::Result<()> {
     }
 
     assert_eq!(None, process.try_wait()?.and_then(|x| x.code()));
-    assert_terminated(process)?;
+    assert_terminated(&mut process)?;
 
-    assert_not_found(&terminator);
-
-    Ok(())
-}
-
-#[test]
-fn test_wait_with_timeout() -> io::Result<()> {
-    let mut process = create_process(Some(ONE_SECOND))?;
-    let terminator = process.terminator()?;
-
-    assert_eq!(
-        Some(Some(0)),
-        process
-            .controlled()
-            .time_limit(FIVE_SECONDS)
-            .strict_errors()
-            .wait()?
-            .map(ExitStatus::code),
-    );
-    assert_not_found(&terminator);
+    unsafe {
+        assert_not_found(&terminator);
+    }
 
     Ok(())
 }
 
 #[test]
-fn test_wait_with_timeout_expired() -> io::Result<()> {
-    let mut process = create_process(None)?;
-    let terminator = process.terminator()?;
-
-    assert_eq!(
-        None,
-        process
-            .controlled()
-            .time_limit(ONE_SECOND)
-            .strict_errors()
-            .wait()?,
-    );
-    thread::sleep(ONE_SECOND);
-    unsafe { terminator.terminate() }
+fn test_time_limit() -> io::Result<()> {
+    test!(
+        command: create_command(ONE_SECOND),
+        time_limit: FIVE_SECONDS,
+        terminating: false,
+        expected_result: Some(Some(0)),
+        run: |terminator| unsafe { assert_not_found(terminator) },
+    )
 }
 
 #[test]
-fn test_wait_for_output_with_timeout() -> io::Result<()> {
-    let process = create_process(Some(ONE_SECOND))?;
-    let terminator = process.terminator()?;
-
-    assert_eq!(
-        Some(Some(0)),
-        process
-            .controlled_with_output()
-            .time_limit(FIVE_SECONDS)
-            .strict_errors()
-            .wait()?
-            .map(|x| x.status.code()),
-    );
-    assert_not_found(&terminator);
-
-    Ok(())
+fn test_time_limit_expired() -> io::Result<()> {
+    test!(
+        command: create_command(FIVE_SECONDS),
+        time_limit: ONE_SECOND,
+        terminating: false,
+        expected_result: None,
+        run: |terminator| {
+            thread::sleep(ONE_SECOND);
+            unsafe { terminator.terminate() }?;
+        },
+    )
 }
 
 #[test]
-fn test_wait_for_output_with_timeout_expired() -> io::Result<()> {
-    let process = create_process(None)?;
-    let terminator = process.terminator()?;
-
-    assert_eq!(
-        None,
-        process
-            .controlled_with_output()
-            .time_limit(ONE_SECOND)
-            .strict_errors()
-            .wait()?,
-    );
-    thread::sleep(ONE_SECOND);
-    unsafe { terminator.terminate() }
+fn test_terminating_time_limit() -> io::Result<()> {
+    test!(
+        command: create_command(ONE_SECOND),
+        time_limit: FIVE_SECONDS,
+        terminating: true,
+        expected_result: Some(Some(0)),
+        run: |terminator| unsafe { assert_not_found(terminator) },
+    )
 }
 
 #[test]
-fn test_wait_with_terminating_timeout() -> io::Result<()> {
-    let mut process = create_process(Some(ONE_SECOND))?;
-    let terminator = process.terminator()?;
-
-    assert_eq!(
-        Some(Some(0)),
-        process
-            .controlled()
-            .time_limit(FIVE_SECONDS)
-            .strict_errors()
-            .terminate_for_timeout()
-            .wait()?
-            .map(ExitStatus::code),
-    );
-    assert_not_found(&terminator);
-
-    Ok(())
+fn test_terminating_time_limit_expired() -> io::Result<()> {
+    test!(
+        command: create_command(FIVE_SECONDS),
+        time_limit: ONE_SECOND,
+        terminating: true,
+        expected_result: None,
+        run: |terminator| unsafe { assert_not_found(terminator) },
+    )
 }
 
 #[test]
-fn test_wait_with_terminating_timeout_expired() -> io::Result<()> {
-    let mut process = create_process(None)?;
-    let terminator = process.terminator()?;
+fn test_stdin() -> io::Result<()> {
+    let mut command = Command::new("perl");
+    let _ = command.stdin(Stdio::piped());
 
-    assert_eq!(
-        None,
-        process
-            .controlled()
-            .time_limit(ONE_SECOND)
-            .strict_errors()
-            .terminate_for_timeout()
-            .wait()?,
-    );
-    thread::sleep(ONE_SECOND);
-    assert_terminated(process)?;
-
-    assert_not_found(&terminator);
-
-    Ok(())
-}
-
-#[test]
-fn test_wait_for_output_with_terminating_timeout() -> io::Result<()> {
-    let process = create_process(Some(ONE_SECOND))?;
-    let terminator = process.terminator()?;
-
-    assert_eq!(
-        Some(Some(0)),
-        process
-            .controlled_with_output()
-            .time_limit(FIVE_SECONDS)
-            .strict_errors()
-            .terminate_for_timeout()
-            .wait()?
-            .map(|x| x.status.code()),
-    );
-    assert_not_found(&terminator);
-
-    Ok(())
-}
-
-#[test]
-fn test_wait_for_output_with_terminating_timeout_expired() -> io::Result<()> {
-    let process = create_process(None)?;
-    let terminator = process.terminator()?;
-
-    assert_eq!(
-        None,
-        process
-            .controlled_with_output()
-            .time_limit(ONE_SECOND)
-            .strict_errors()
-            .terminate_for_timeout()
-            .wait()?,
-    );
-    thread::sleep(ONE_SECOND);
-    assert_not_found(&terminator);
-
-    Ok(())
-}
-
-#[test]
-fn test_wait_with_stdin() -> io::Result<()> {
-    let mut process = create_stdin_process()?;
-    let terminator = process.terminator()?;
-
-    assert_eq!(
-        Some(Some(0)),
-        process
-            .controlled()
-            .time_limit(FIVE_SECONDS)
-            .strict_errors()
-            .wait()?
-            .map(ExitStatus::code),
-    );
-    assert_not_found(&terminator);
-
-    Ok(())
-}
-
-#[test]
-fn test_wait_for_output_with_stdin() -> io::Result<()> {
-    let process = create_stdin_process()?;
-    let terminator = process.terminator()?;
-
-    assert_eq!(
-        Some(Some(0)),
-        process
-            .controlled_with_output()
-            .time_limit(FIVE_SECONDS)
-            .strict_errors()
-            .wait()?
-            .map(|x| x.status.code()),
-    );
-    assert_not_found(&terminator);
-
-    Ok(())
+    test!(
+        command: command,
+        time_limit: FIVE_SECONDS,
+        terminating: false,
+        expected_result: Some(Some(0)),
+        run: |terminator| unsafe { assert_not_found(terminator) },
+    )
 }
 
 #[test]
@@ -288,7 +216,7 @@ fn test_large_output() -> io::Result<()> {
         .wait()?
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(Some(0), output.status.code());
 
     assert_eq!(OUTPUT_LENGTH, output.stdout.len());
     assert_eq!(OUTPUT_LENGTH, output.stderr.len());

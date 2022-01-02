@@ -224,6 +224,13 @@ impl From<process::Output> for Output {
     }
 }
 
+impl From<Output> for ExitStatus {
+    #[inline]
+    fn from(value: Output) -> Self {
+        value.status
+    }
+}
+
 /// A temporary wrapper for process limits.
 #[must_use]
 pub trait Control: private::Sealed {
