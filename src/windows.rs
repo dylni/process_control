@@ -3,13 +3,14 @@ use std::cell::Cell;
 use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Debug;
+use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io;
 use std::mem;
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::ExitStatusExt;
+use std::process;
 use std::process::Child;
-pub(super) use std::process::ExitStatus;
 use std::ptr;
 use std::time::Duration;
 
@@ -43,6 +44,7 @@ type BOOL = i32;
 #[allow(clippy::upper_case_acronyms)]
 type DWORD = u32;
 
+const EXIT_SUCCESS: DWORD = 0;
 const STILL_ACTIVE: DWORD = STATUS_PENDING as DWORD;
 const TRUE: BOOL = 1;
 
@@ -69,6 +71,32 @@ where
                 replaced,
             );
         }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(C)]
+pub(super) struct ExitStatus(DWORD);
+
+impl ExitStatus {
+    pub(super) const fn success(self) -> bool {
+        self.0 == EXIT_SUCCESS
+    }
+
+    pub(super) fn code(self) -> Option<DWORD> {
+        Some(self.0)
+    }
+}
+
+impl Display for ExitStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&process::ExitStatus::from_raw(self.0), f)
+    }
+}
+
+impl From<process::ExitStatus> for ExitStatus {
+    fn from(value: process::ExitStatus) -> Self {
+        Self(value.code().expect("process has no exit code") as u32)
     }
 }
 
@@ -140,7 +168,7 @@ impl JobHandle {
 
 impl Debug for JobHandle {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        any::type_name::<Cell<Option<RawHandle>>>().fmt(f)
+        Debug::fmt(any::type_name::<Cell<Option<RawHandle>>>(), f)
     }
 }
 
@@ -247,8 +275,8 @@ impl SharedHandle {
 
             match unsafe { WaitForSingleObject(self.handle.0, time_limit) } {
                 WAIT_OBJECT_0 => {
-                    let exit_code = unsafe { self.handle.get_exit_code()? };
-                    return Ok(Some(ExitStatus::from_raw(exit_code)));
+                    return unsafe { self.handle.get_exit_code() }
+                        .map(|x| Some(ExitStatus(x)));
                 }
                 WAIT_TIMEOUT => {}
                 _ => return Err(io::Error::last_os_error()),

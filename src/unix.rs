@@ -44,7 +44,7 @@ pub(super) struct ExitStatus {
 }
 
 impl ExitStatus {
-    pub(super) fn success(self) -> bool {
+    pub(super) const fn success(self) -> bool {
         !self.terminated && self.value == 0
     }
 
