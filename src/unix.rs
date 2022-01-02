@@ -1,4 +1,3 @@
-use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Display;
@@ -9,22 +8,33 @@ use std::os::raw::c_int;
 use std::os::unix::process::ExitStatusExt;
 use std::process;
 use std::process::Child;
-use std::ptr;
 use std::thread;
 use std::time::Duration;
 
+#[cfg(target_env = "gnu")]
 use libc::__rlimit_resource_t;
 use libc::pid_t;
-use libc::rlimit;
 use libc::CLD_EXITED;
 use libc::EINTR;
 use libc::ESRCH;
 use libc::P_PID;
-use libc::RLIMIT_AS;
 use libc::SIGKILL;
 use libc::WEXITED;
 use libc::WNOWAIT;
 use libc::WSTOPPED;
+
+if_memory_limit! {
+    use std::convert::TryFrom;
+    use std::ptr;
+
+    use libc::rlimit;
+    use libc::RLIMIT_AS;
+}
+
+#[cfg(any(target_env = "musl", target_os = "android"))]
+type LimitResource = c_int;
+#[cfg(target_env = "gnu")]
+type LimitResource = __rlimit_resource_t;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(C)]
@@ -132,6 +142,11 @@ impl RawPid {
 #[derive(Debug)]
 pub(super) struct SharedHandle {
     pid: RawPid,
+    #[cfg(any(
+        target_env = "gnu",
+        target_env = "musl",
+        target_os = "android",
+    ))]
     pub(super) memory_limit: Option<usize>,
     pub(super) time_limit: Option<Duration>,
 }
@@ -140,43 +155,60 @@ impl SharedHandle {
     pub(super) unsafe fn new(process: &Child) -> Self {
         Self {
             pid: RawPid::new(process),
+            #[cfg(any(
+                target_env = "gnu",
+                target_env = "musl",
+                target_os = "android",
+            ))]
             memory_limit: None,
             time_limit: None,
         }
     }
 
-    unsafe fn set_limit(
-        &mut self,
-        resource: __rlimit_resource_t,
-        limit: usize,
-    ) -> io::Result<()> {
-        #[cfg(target_pointer_width = "32")]
-        type PointerWidth = u32;
-        #[cfg(target_pointer_width = "64")]
-        type PointerWidth = u64;
-        #[cfg(not(any(
-            target_pointer_width = "32",
-            target_pointer_width = "64",
-        )))]
-        compile_error!("unsupported pointer width");
+    if_memory_limit! {
+        unsafe fn set_limit(
+            &mut self,
+            resource: LimitResource,
+            limit: usize,
+        ) -> io::Result<()> {
+            #[cfg(target_pointer_width = "32")]
+            type PointerWidth = u32;
+            #[cfg(target_pointer_width = "64")]
+            type PointerWidth = u64;
+            #[cfg(not(any(
+                target_pointer_width = "32",
+                target_pointer_width = "64",
+            )))]
+            compile_error!("unsupported pointer width");
 
-        let limit = PointerWidth::try_from(limit)
-            .expect("`usize` too large for pointer width");
+            #[cfg_attr(
+                not(target_os = "freebsd"),
+                allow(clippy::useless_conversion),
+            )]
+            let limit = PointerWidth::try_from(limit)
+                .expect("`usize` too large for pointer width")
+                .into();
 
-        check_syscall(libc::prlimit(
-            self.pid.as_pid(),
-            resource,
-            &rlimit {
-                rlim_cur: limit,
-                rlim_max: limit,
-            },
-            ptr::null_mut(),
-        ))
+            check_syscall(libc::prlimit(
+                self.pid.as_pid(),
+                resource,
+                &rlimit {
+                    rlim_cur: limit,
+                    rlim_max: limit,
+                },
+                ptr::null_mut(),
+            ))
+        }
     }
 
     pub(super) fn wait(&mut self) -> io::Result<Option<ExitStatus>> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/process/process_unix.rs#L432-L441
 
+        #[cfg(any(
+            target_env = "gnu",
+            target_env = "musl",
+            target_os = "android",
+        ))]
         if let Some(memory_limit) = self.memory_limit {
             unsafe {
                 self.set_limit(RLIMIT_AS, memory_limit)?;
@@ -187,10 +219,14 @@ impl SharedHandle {
         run_with_timeout(
             move || loop {
                 let mut process_info = MaybeUninit::uninit();
+                #[cfg_attr(
+                    not(target_os = "freebsd"),
+                    allow(clippy::useless_conversion)
+                )]
                 let result = check_syscall(unsafe {
                     libc::waitid(
                         P_PID,
-                        pid,
+                        pid.into(),
                         process_info.as_mut_ptr(),
                         WEXITED | WNOWAIT | WSTOPPED,
                     )

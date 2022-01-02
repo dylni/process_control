@@ -90,6 +90,20 @@ use std::process;
 use std::process::Child;
 use std::time::Duration;
 
+macro_rules! if_memory_limit {
+    ( $($item:item)+ ) => {
+        $(
+            #[cfg(any(
+                target_env = "gnu",
+                target_env = "musl",
+                target_os = "android",
+                windows,
+            ))]
+            $item
+        )+
+    };
+}
+
 mod control;
 
 #[cfg_attr(unix, path = "unix.rs")]
@@ -239,16 +253,27 @@ pub trait Control: private::Sealed {
     /// [`wait`]: Self::wait
     type Result;
 
-    /// Sets the total virtual memory limit for the process in bytes.
-    ///
-    /// If the process attempts to allocate memory in excess of this limit, the
-    /// allocation will fail. The type of failure will depend on the platform,
-    /// and the process might terminate if it cannot handle it.
-    ///
-    /// Small memory limits are safe, but they might prevent the operating
-    /// system from starting the process.
-    #[must_use]
-    fn memory_limit(self, limit: usize) -> Self;
+    if_memory_limit! {
+        /// Sets the total virtual memory limit for the process in bytes.
+        ///
+        /// If the process attempts to allocate memory in excess of this limit,
+        /// the allocation will fail. The type of failure will depend on the
+        /// platform, and the process might terminate if it cannot handle it.
+        ///
+        /// Small memory limits are safe, but they might prevent the operating
+        /// system from starting the process.
+        #[cfg_attr(
+            process_control_docs_rs,
+            doc(cfg(any(
+                target_env = "gnu",
+                target_env = "musl",
+                target_os = "android",
+                windows,
+            )))
+        )]
+        #[must_use]
+        fn memory_limit(self, limit: usize) -> Self;
+    }
 
     /// Sets the total time limit for the process in milliseconds.
     ///

@@ -53,10 +53,12 @@ macro_rules! r#impl {
         impl$(<$lifetime>)? Control for $struct$(<$lifetime>)? {
             type Result = $return_type;
 
-            #[inline]
-            fn memory_limit(mut self, limit: usize) -> Self {
-                self.handle.memory_limit = Some(limit);
-                self
+            if_memory_limit! {
+                #[inline]
+                fn memory_limit(mut self, limit: usize) -> Self {
+                    self.handle.memory_limit = Some(limit);
+                    self
+                }
             }
 
             #[inline]

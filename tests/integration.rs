@@ -25,11 +25,27 @@ macro_rules! assert_matches {
     }};
 }
 
+macro_rules! if_memory_limit {
+    ( $($item:item)+ ) => {
+        $(
+            #[cfg(any(
+                target_env = "gnu",
+                target_env = "musl",
+                target_os = "android",
+                windows,
+            ))]
+            $item
+        )+
+    };
+}
+
 const SHORT_TIME_LIMIT: Duration = Duration::from_secs(2);
 
 const LONG_TIME_LIMIT: Duration = Duration::from_secs(5);
 
-const MEMORY_LIMIT: usize = 104_857_600;
+if_memory_limit! {
+    const MEMORY_LIMIT: usize = 104_857_600;
+}
 
 fn create_time_limit_command(seconds: Duration) -> Command {
     assert_eq!(0, seconds.subsec_millis());
@@ -43,17 +59,19 @@ fn create_time_limit_command(seconds: Duration) -> Command {
     command
 }
 
-fn create_memory_limit_command(bytes: usize) -> Command {
-    let mut command = Command::new("perl");
-    let _ = command
-        .arg("-e")
-        .arg("my $bytes = 'a' x $ARGV[0]; print $bytes; sleep $ARGV[1]")
-        .arg("--")
-        .arg(bytes.to_string())
-        .arg(SHORT_TIME_LIMIT.as_secs().to_string())
-        .stderr(Stdio::null())
-        .stdout(Stdio::null());
-    command
+if_memory_limit! {
+    fn create_memory_limit_command(bytes: usize) -> Command {
+        let mut command = Command::new("perl");
+        let _ = command
+            .arg("-e")
+            .arg("my $bytes = 'a' x $ARGV[0]; print $bytes; sleep $ARGV[1]")
+            .arg("--")
+            .arg(bytes.to_string())
+            .arg(SHORT_TIME_LIMIT.as_secs().to_string())
+            .stderr(Stdio::null())
+            .stdout(Stdio::null());
+        command
+    }
 }
 
 #[track_caller]
@@ -117,6 +135,12 @@ macro_rules! test {
     }};
     ( @time_limit $control:expr , $limit:expr , $($token:tt)* ) => {{
         test!(@strict_errors $control.time_limit($limit), $($token)*);
+        #[cfg(any(
+            target_env = "gnu",
+            target_env = "musl",
+            target_os = "android",
+            windows,
+        ))]
         test!(
             @strict_errors
             $control.time_limit($limit).memory_limit(MEMORY_LIMIT),
@@ -219,61 +243,63 @@ fn test_terminating_time_limit_expired() -> io::Result<()> {
     )
 }
 
-#[test]
-fn test_memory_limit() -> io::Result<()> {
-    test!(
-        command: create_memory_limit_command(MEMORY_LIMIT),
-        memory_limit: 2 * MEMORY_LIMIT,
-        terminating: false,
-        expected_result: Some(Some(0)),
-        run: |terminator| unsafe { assert_not_found(terminator) },
-    )
-}
+if_memory_limit! {
+    #[test]
+    fn test_memory_limit() -> io::Result<()> {
+        test!(
+            command: create_memory_limit_command(MEMORY_LIMIT),
+            memory_limit: 2 * MEMORY_LIMIT,
+            terminating: false,
+            expected_result: Some(Some(0)),
+            run: |terminator| unsafe { assert_not_found(terminator) },
+        )
+    }
 
-#[test]
-fn test_memory_limit_exceeded() -> io::Result<()> {
-    test!(
-        command: create_memory_limit_command(MEMORY_LIMIT),
-        memory_limit: MEMORY_LIMIT,
-        terminating: false,
-        expected_result: Some(Some(1)),
-        run: |terminator| unsafe { assert_not_found(terminator) },
-    )
-}
+    #[test]
+    fn test_memory_limit_exceeded() -> io::Result<()> {
+        test!(
+            command: create_memory_limit_command(MEMORY_LIMIT),
+            memory_limit: MEMORY_LIMIT,
+            terminating: false,
+            expected_result: Some(Some(1)),
+            run: |terminator| unsafe { assert_not_found(terminator) },
+        )
+    }
 
-#[cfg(windows)]
-macro_rules! memory_limit_0_result {
-    () => {
-        Some(1)
-    };
-}
-#[cfg(not(windows))]
-macro_rules! memory_limit_0_result {
-    () => {
-        Some(127) | None
-    };
-}
+    #[cfg(windows)]
+    macro_rules! memory_limit_0_result {
+        () => {
+            Some(1)
+        };
+    }
+    #[cfg(not(windows))]
+    macro_rules! memory_limit_0_result {
+        () => {
+            Some(127) | None
+        };
+    }
 
-#[test]
-fn test_memory_limit_0() -> io::Result<()> {
-    test!(
-        command: create_memory_limit_command(MEMORY_LIMIT),
-        memory_limit: 0,
-        terminating: false,
-        expected_result: Some(memory_limit_0_result!()),
-        run: |terminator| unsafe { assert_not_found(terminator) },
-    )
-}
+    #[test]
+    fn test_memory_limit_0() -> io::Result<()> {
+        test!(
+            command: create_memory_limit_command(MEMORY_LIMIT),
+            memory_limit: 0,
+            terminating: false,
+            expected_result: Some(memory_limit_0_result!()),
+            run: |terminator| unsafe { assert_not_found(terminator) },
+        )
+    }
 
-#[test]
-fn test_memory_limit_1() -> io::Result<()> {
-    test!(
-        command: create_memory_limit_command(MEMORY_LIMIT),
-        memory_limit: 1,
-        terminating: false,
-        expected_result: Some(memory_limit_0_result!()),
-        run: |terminator| unsafe { assert_not_found(terminator) },
-    )
+    #[test]
+    fn test_memory_limit_1() -> io::Result<()> {
+        test!(
+            command: create_memory_limit_command(MEMORY_LIMIT),
+            memory_limit: 1,
+            terminating: false,
+            expected_result: Some(memory_limit_0_result!()),
+            run: |terminator| unsafe { assert_not_found(terminator) },
+        )
+    }
 }
 
 #[test]
