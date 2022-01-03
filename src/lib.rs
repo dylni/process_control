@@ -506,7 +506,7 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
-    #[deprecated = "use `controlled` instead"]
+    #[deprecated = "use `controlled` and `Control::time_limit` instead"]
     #[must_use]
     fn with_timeout(
         &'a mut self,
