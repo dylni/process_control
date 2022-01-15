@@ -11,7 +11,7 @@ use std::process::Child;
 use std::thread;
 use std::time::Duration;
 
-#[cfg(target_env = "gnu")]
+#[cfg(all(target_env = "gnu", target_os = "linux"))]
 use libc::__rlimit_resource_t;
 use libc::pid_t;
 use libc::CLD_EXITED;
@@ -31,9 +31,12 @@ if_memory_limit! {
     use libc::RLIMIT_AS;
 }
 
-#[cfg(any(target_env = "musl", target_os = "android"))]
+#[cfg(any(
+    all(target_env = "musl", target_os = "linux"),
+    target_os = "android",
+))]
 type LimitResource = c_int;
-#[cfg(target_env = "gnu")]
+#[cfg(all(target_env = "gnu", target_os = "linux"))]
 type LimitResource = __rlimit_resource_t;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -144,9 +147,11 @@ impl RawPid {
 pub(super) struct SharedHandle {
     pid: RawPid,
     #[cfg(any(
-        target_env = "gnu",
-        target_env = "musl",
         target_os = "android",
+        all(
+            target_os = "linux",
+            any(target_env = "gnu", target_env = "musl"),
+        ),
     ))]
     pub(super) memory_limit: Option<usize>,
     pub(super) time_limit: Option<Duration>,
@@ -157,9 +162,11 @@ impl SharedHandle {
         Self {
             pid: RawPid::new(process),
             #[cfg(any(
-                target_env = "gnu",
-                target_env = "musl",
                 target_os = "android",
+                all(
+                    target_os = "linux",
+                    any(target_env = "gnu", target_env = "musl"),
+                ),
             ))]
             memory_limit: None,
             time_limit: None,
@@ -206,9 +213,11 @@ impl SharedHandle {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/process/process_unix.rs#L432-L441
 
         #[cfg(any(
-            target_env = "gnu",
-            target_env = "musl",
             target_os = "android",
+            all(
+                target_os = "linux",
+                any(target_env = "gnu", target_env = "musl"),
+            ),
         ))]
         if let Some(memory_limit) = self.memory_limit {
             unsafe {

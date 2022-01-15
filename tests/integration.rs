@@ -29,9 +29,11 @@ macro_rules! if_memory_limit {
     ( $($item:item)+ ) => {
         $(
             #[cfg(any(
-                target_env = "gnu",
-                target_env = "musl",
                 target_os = "android",
+                all(
+                    target_os = "linux",
+                    any(target_env = "gnu", target_env = "musl"),
+                ),
                 windows,
             ))]
             $item
@@ -136,9 +138,11 @@ macro_rules! test {
     ( @time_limit $control:expr , $limit:expr , $($token:tt)* ) => {{
         test!(@strict_errors $control.time_limit($limit), $($token)*);
         #[cfg(any(
-            target_env = "gnu",
-            target_env = "musl",
             target_os = "android",
+            all(
+                target_os = "linux",
+                any(target_env = "gnu", target_env = "musl"),
+            ),
             windows,
         ))]
         test!(

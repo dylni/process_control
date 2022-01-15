@@ -94,9 +94,11 @@ macro_rules! if_memory_limit {
     ( $($item:item)+ ) => {
         $(
             #[cfg(any(
-                target_env = "gnu",
-                target_env = "musl",
                 target_os = "android",
+                all(
+                    target_os = "linux",
+                    any(target_env = "gnu", target_env = "musl"),
+                ),
                 windows,
             ))]
             $item
@@ -265,9 +267,11 @@ pub trait Control: private::Sealed {
         #[cfg_attr(
             process_control_docs_rs,
             doc(cfg(any(
-                target_env = "gnu",
-                target_env = "musl",
                 target_os = "android",
+                all(
+                    target_os = "linux",
+                    any(target_env = "gnu", target_env = "musl"),
+                ),
                 windows,
             )))
         )]
