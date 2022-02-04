@@ -116,6 +116,10 @@ fn check_syscall(result: BOOL) -> io::Result<()> {
 struct RawHandle(HANDLE);
 
 impl RawHandle {
+    fn new(process: &Child) -> Self {
+        Self(process.as_raw_handle() as _)
+    }
+
     unsafe fn get_exit_code(&self) -> io::Result<DWORD> {
         let mut exit_code = 0;
         check_syscall(GetExitCodeProcess(self.0, &mut exit_code))?;
@@ -183,7 +187,7 @@ pub(super) struct SharedHandle {
 impl SharedHandle {
     pub(super) unsafe fn new(process: &Child) -> Self {
         Self {
-            handle: RawHandle(process.as_raw_handle()),
+            handle: RawHandle::new(process),
             memory_limit: None,
             time_limit: None,
             job_handle: JobHandle(Cell::new(None)),
@@ -196,7 +200,7 @@ impl SharedHandle {
         if let Some(memory_limit) = self.memory_limit {
             let job_handle =
                 unsafe { CreateJobObjectW(ptr::null(), ptr::null_mut()) };
-            if job_handle.is_null() {
+            if job_handle == 0 {
                 return Err(io::Error::last_os_error());
             }
             self.job_handle.0.replace_none(RawHandle(job_handle));
@@ -300,11 +304,11 @@ pub(super) struct DuplicatedHandle(RawHandle);
 impl DuplicatedHandle {
     pub(super) fn new(process: &Child) -> io::Result<Self> {
         let parent_handle = unsafe { GetCurrentProcess() };
-        let mut handle = ptr::null_mut();
+        let mut handle = 0;
         check_syscall(unsafe {
             DuplicateHandle(
                 parent_handle,
-                process.as_raw_handle(),
+                RawHandle::new(process).0,
                 parent_handle,
                 &mut handle,
                 0,
