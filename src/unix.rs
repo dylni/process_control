@@ -130,16 +130,14 @@ where
         }))
 }
 
+const INVALID_PID_ERROR: &str = "process identifier is invalid";
+
 #[derive(Debug)]
-struct RawPid(u32);
+struct RawPid(pid_t);
 
 impl RawPid {
     fn new(process: &Child) -> Self {
-        Self(process.id())
-    }
-
-    fn as_pid(&self) -> pid_t {
-        self.0.try_into().expect("process identifier is invalid")
+        Self(process.id().try_into().expect(INVALID_PID_ERROR))
     }
 }
 
@@ -198,7 +196,7 @@ impl SharedHandle {
                 .into();
 
             check_syscall(libc::prlimit(
-                self.pid.as_pid(),
+                self.pid.0,
                 resource,
                 &rlimit {
                     rlim_cur: limit,
@@ -225,18 +223,18 @@ impl SharedHandle {
             }
         }
 
-        let pid = self.pid.0;
+        #[cfg_attr(
+            any(target_os = "illumos", target_os = "solaris"),
+            allow(clippy::useless_conversion)
+        )]
+        let pid = self.pid.0.try_into().expect(INVALID_PID_ERROR);
         run_with_time_limit(
             move || loop {
                 let mut process_info = MaybeUninit::uninit();
-                #[cfg_attr(
-                    not(target_os = "freebsd"),
-                    allow(clippy::useless_conversion)
-                )]
                 let result = check_syscall(unsafe {
                     libc::waitid(
                         P_PID,
-                        pid.into(),
+                        pid,
                         process_info.as_mut_ptr(),
                         WEXITED | WNOWAIT | WSTOPPED,
                     )
@@ -272,8 +270,9 @@ impl DuplicatedHandle {
         Ok(Self(RawPid::new(process)))
     }
 
+    #[rustfmt::skip]
     pub(super) unsafe fn terminate(&self) -> io::Result<()> {
-        check_syscall(libc::kill(self.0.as_pid(), SIGKILL)).map_err(|error| {
+        check_syscall(libc::kill(self.0.0, SIGKILL)).map_err(|error| {
             // This error is usually decoded to [ErrorKind::Other]:
             // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/mod.rs#L100-L123
             if error.raw_os_error() == Some(ESRCH) {

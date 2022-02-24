@@ -53,7 +53,7 @@ jobs:
     timeout-minutes: 5
     strategy:
       matrix:
-        target: [x86_64-unknown-freebsd]
+        target: [x86_64-unknown-freebsd, x86_64-unknown-illumos]
         version: [1.54.0, stable, beta, nightly]
   test:
     needs: [build]
