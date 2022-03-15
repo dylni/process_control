@@ -3,6 +3,7 @@ use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io;
+use std::mem;
 use std::mem::MaybeUninit;
 use std::os::raw::c_int;
 use std::os::unix::process::ExitStatusExt;
@@ -13,10 +14,12 @@ use std::time::Duration;
 
 #[cfg(all(target_env = "gnu", target_os = "linux"))]
 use libc::__rlimit_resource_t;
+use libc::id_t;
 use libc::pid_t;
 use libc::CLD_EXITED;
 use libc::EINTR;
 use libc::ESRCH;
+use libc::EXIT_SUCCESS;
 use libc::P_PID;
 use libc::SIGKILL;
 use libc::WEXITED;
@@ -29,6 +32,12 @@ if_memory_limit! {
 
     use libc::rlimit;
     use libc::RLIMIT_AS;
+}
+
+macro_rules! static_assert {
+    ( $condition:expr ) => {
+        const _: () = [()][if $condition { 0 } else { 1 }];
+    };
 }
 
 #[cfg(any(
@@ -48,7 +57,7 @@ pub(super) struct ExitStatus {
 
 impl ExitStatus {
     pub(super) const fn success(self) -> bool {
-        self.exited && self.value == 0
+        self.exited && self.value == EXIT_SUCCESS
     }
 
     fn get_value(self, exit: bool) -> Option<c_int> {
@@ -108,6 +117,12 @@ where
     F: 'static + FnOnce() -> R + Send,
     R: 'static + Send,
 {
+    let time_limit = if let Some(time_limit) = time_limit {
+        time_limit
+    } else {
+        return Ok(Some(run_fn()));
+    };
+
     let (result_sender, result_receiver) = {
         #[cfg(feature = "crossbeam-channel")]
         {
@@ -120,14 +135,10 @@ where
             mpsc::channel()
         }
     };
-    let _ =
-        thread::Builder::new().spawn(move || result_sender.send(run_fn()))?;
 
-    Ok(time_limit
-        .map(|x| result_receiver.recv_timeout(x).ok())
-        .unwrap_or_else(|| {
-            Some(result_receiver.recv().expect("channel was disconnected"))
-        }))
+    thread::Builder::new()
+        .spawn(move || result_sender.send(run_fn()))
+        .map(|_| result_receiver.recv_timeout(time_limit).ok())
 }
 
 const INVALID_PID_ERROR: &str = "process identifier is invalid";
@@ -137,7 +148,15 @@ struct RawPid(pid_t);
 
 impl RawPid {
     fn new(process: &Child) -> Self {
-        Self(process.id().try_into().expect(INVALID_PID_ERROR))
+        let pid: u32 = process.id();
+        Self(pid.try_into().expect(INVALID_PID_ERROR))
+    }
+
+    const fn as_id(&self) -> id_t {
+        static_assert!(pid_t::MAX == i32::MAX);
+        static_assert!(mem::size_of::<pid_t>() <= mem::size_of::<id_t>());
+
+        self.0 as _
     }
 }
 
@@ -223,11 +242,7 @@ impl SharedHandle {
             }
         }
 
-        #[cfg_attr(
-            any(target_os = "illumos", target_os = "solaris"),
-            allow(clippy::useless_conversion)
-        )]
-        let pid = self.pid.0.try_into().expect(INVALID_PID_ERROR);
+        let pid = self.pid.as_id();
         run_with_time_limit(
             move || loop {
                 let mut process_info = MaybeUninit::uninit();

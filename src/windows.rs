@@ -21,7 +21,7 @@ use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::Foundation::ERROR_INVALID_HANDLE;
 use windows_sys::Win32::Foundation::ERROR_INVALID_PARAMETER;
 use windows_sys::Win32::Foundation::HANDLE;
-use windows_sys::Win32::Foundation::STATUS_PENDING;
+use windows_sys::Win32::Foundation::STILL_ACTIVE;
 use windows_sys::Win32::Foundation::WAIT_TIMEOUT;
 use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
 use windows_sys::Win32::System::JobObjects::CreateJobObjectW;
@@ -45,7 +45,6 @@ type BOOL = i32;
 type DWORD = u32;
 
 const EXIT_SUCCESS: DWORD = 0;
-const STILL_ACTIVE: DWORD = STATUS_PENDING as _;
 const TRUE: BOOL = 1;
 
 trait ReplaceNone<T> {
@@ -134,7 +133,7 @@ impl RawHandle {
                     ERROR_ACCESS_DENIED => {
                         matches!(
                             self.get_exit_code(),
-                            Ok(x) if x != STILL_ACTIVE,
+                            Ok(x) if x.try_into() != Ok(STILL_ACTIVE),
                         )
                     }
                     // This error is usually decoded to [ErrorKind::Other]:
@@ -197,71 +196,72 @@ impl SharedHandle {
     fn set_memory_limit(&mut self) -> io::Result<()> {
         self.job_handle.close()?;
 
-        if let Some(memory_limit) = self.memory_limit {
-            let job_handle =
-                unsafe { CreateJobObjectW(ptr::null(), ptr::null_mut()) };
-            if job_handle == 0 {
-                return Err(io::Error::last_os_error());
-            }
-            self.job_handle.0.replace_none(RawHandle(job_handle));
+        let memory_limit = if let Some(memory_limit) = self.memory_limit {
+            memory_limit
+        } else {
+            return Ok(());
+        };
 
-            let job_information = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
-                BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION {
-                    PerProcessUserTimeLimit: 0,
-                    PerJobUserTimeLimit: 0,
-                    LimitFlags: JOB_OBJECT_LIMIT_JOB_MEMORY,
-                    MinimumWorkingSetSize: 0,
-                    MaximumWorkingSetSize: 0,
-                    ActiveProcessLimit: 0,
-                    Affinity: 0,
-                    PriorityClass: 0,
-                    SchedulingClass: 0,
-                },
-                IoInfo: IO_COUNTERS {
-                    ReadOperationCount: 0,
-                    WriteOperationCount: 0,
-                    OtherOperationCount: 0,
-                    ReadTransferCount: 0,
-                    WriteTransferCount: 0,
-                    OtherTransferCount: 0,
-                },
-                ProcessMemoryLimit: 0,
-                JobMemoryLimit: memory_limit,
-                PeakProcessMemoryUsed: 0,
-                PeakJobMemoryUsed: 0,
-            };
-            let job_information_ptr: *const _ = &job_information;
-            let result = check_syscall(unsafe {
-                SetInformationJobObject(
-                    job_handle,
-                    JobObjectExtendedLimitInformation,
-                    job_information_ptr.cast(),
-                    mem::size_of_val(&job_information)
-                        .try_into()
-                        .expect("job information too large for WinAPI"),
-                )
-            });
-            match result {
-                Ok(()) => {}
-                // This error will occur when the job has a low memory limit.
-                Err(ref error) => {
-                    return if raw_os_error(error)
-                        == Some(ERROR_INVALID_PARAMETER)
-                    {
-                        self.job_handle.close()?;
-                        unsafe { self.handle.terminate() }
-                    } else {
-                        result
-                    };
-                }
-            }
+        let job_handle =
+            unsafe { CreateJobObjectW(ptr::null(), ptr::null_mut()) };
+        if job_handle == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        self.job_handle.0.replace_none(RawHandle(job_handle));
 
-            check_syscall(unsafe {
-                AssignProcessToJobObject(job_handle, self.handle.0)
-            })?;
+        let job_information = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+            BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION {
+                PerProcessUserTimeLimit: 0,
+                PerJobUserTimeLimit: 0,
+                LimitFlags: JOB_OBJECT_LIMIT_JOB_MEMORY,
+                MinimumWorkingSetSize: 0,
+                MaximumWorkingSetSize: 0,
+                ActiveProcessLimit: 0,
+                Affinity: 0,
+                PriorityClass: 0,
+                SchedulingClass: 0,
+            },
+            IoInfo: IO_COUNTERS {
+                ReadOperationCount: 0,
+                WriteOperationCount: 0,
+                OtherOperationCount: 0,
+                ReadTransferCount: 0,
+                WriteTransferCount: 0,
+                OtherTransferCount: 0,
+            },
+            ProcessMemoryLimit: 0,
+            JobMemoryLimit: memory_limit,
+            PeakProcessMemoryUsed: 0,
+            PeakJobMemoryUsed: 0,
+        };
+        let job_information_ptr: *const _ = &job_information;
+        let result = check_syscall(unsafe {
+            SetInformationJobObject(
+                job_handle,
+                JobObjectExtendedLimitInformation,
+                job_information_ptr.cast(),
+                mem::size_of_val(&job_information)
+                    .try_into()
+                    .expect("job information too large for WinAPI"),
+            )
+        });
+        match result {
+            Ok(()) => {}
+            // This error will occur when the job has a low memory limit.
+            Err(ref error) => {
+                return if raw_os_error(error) == Some(ERROR_INVALID_PARAMETER)
+                {
+                    self.job_handle.close()?;
+                    unsafe { self.handle.terminate() }
+                } else {
+                    result
+                };
+            }
         }
 
-        Ok(())
+        check_syscall(unsafe {
+            AssignProcessToJobObject(job_handle, self.handle.0)
+        })
     }
 
     pub(super) fn wait(&mut self) -> io::Result<Option<ExitStatus>> {

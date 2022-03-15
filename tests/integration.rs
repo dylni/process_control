@@ -156,14 +156,14 @@ macro_rules! test {
         test!($control.strict_errors(), $($token)*);
     }};
     ( $control:expr , $terminator:expr , terminating: true, $($token:tt)* ) =>
-    {{
+    {
         test!(
             $control.terminate_for_timeout(),
             $terminator,
             terminating: false,
             $($token)*
-        );
-    }};
+        )
+    };
     (
         $control:expr ,
         $terminator:expr ,
@@ -331,7 +331,7 @@ fn test_large_output() -> io::Result<()> {
         .arg(
             r"for (my $i = 0; $i < $ARGV[0]; $i++) {
                 print 'a' x $ARGV[1];
-                print STDERR 'a' x $ARGV[1];
+                print STDERR 'b' x $ARGV[1];
             }",
         )
         .arg("--")
@@ -350,14 +350,14 @@ fn test_large_output() -> io::Result<()> {
 
     assert_eq!(Some(0), output.status.code());
 
-    assert_eq!(OUTPUT_LENGTH, output.stdout.len());
-    assert_eq!(OUTPUT_LENGTH, output.stderr.len());
+    test_output(output.stdout, b'a');
+    test_output(output.stderr, b'b');
 
-    assert!(output
-        .stdout
-        .into_iter()
-        .chain(output.stderr)
-        .all(|x| x == b'a'));
+    return Ok(());
 
-    Ok(())
+    #[track_caller]
+    fn test_output(output: Vec<u8>, byte: u8) {
+        assert_eq!(OUTPUT_LENGTH, output.len());
+        assert!(output.into_iter().all(|x| x == byte));
+    }
 }

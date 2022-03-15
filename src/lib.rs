@@ -15,12 +15,6 @@
 //! only intended for simple restriction of harmless processes.
 //! </div>
 //!
-//! # Implementation
-//!
-//! All traits are [sealed], meaning that they can only be implemented by this
-//! crate. Otherwise, backward compatibility would be more difficult to
-//! maintain for new features.
-//!
 //! # Features
 //!
 //! These features are optional and can be enabled or disabled in a
@@ -32,14 +26,20 @@
 //!   Changes the implementation to use crate [crossbeam-channel] for better
 //!   performance.
 //!
+//! # Implementation
+//!
+//! All traits are [sealed], meaning that they can only be implemented by this
+//! crate. Otherwise, backward compatibility would be more difficult to
+//! maintain for new features.
+//!
 //! # Comparable Crates
 //!
 //! - [wait-timeout] -
 //!   Made for a related purpose but does not provide the same functionality.
 //!   Processes cannot be terminated automatically, and there is no counterpart
-//!   of [`Child::wait_with_output`] to read output while setting a timeout.
-//!   This crate aims to fill in those gaps and simplify the implementation,
-//!   now that [`Receiver::recv_timeout`] exists.
+//!   of [`ChildExt::controlled_with_output`] to read output while setting a
+//!   timeout. This crate aims to fill in those gaps and simplify the
+//!   implementation, now that [`Receiver::recv_timeout`] exists.
 //!
 //! # Examples
 //!

@@ -11,9 +11,9 @@ Methods for setting limits are available on [`ChildExt`], which is implemented
 for [`Child`]. They each return a builder of options to configure how the limit
 should be applied.
 
-***Warning****: This crate should not be used for security. There are
-many ways that a process can bypass resource limits. The limits are only
-intended for simple restriction of harmless processes.*
+***Warning**: This crate should not be used for security. There are many ways
+that a process can bypass resource limits. The limits are only intended for
+simple restriction of harmless processes.*
 
 [![GitHub Build Status](https://github.com/dylni/process_control/workflows/build/badge.svg?branch=master)](https://github.com/dylni/process_control/actions?query=branch%3Amaster)
 
