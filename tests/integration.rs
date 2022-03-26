@@ -8,7 +8,11 @@ use std::time::Duration;
 use process_control::ChildExt;
 use process_control::Control;
 use process_control::ExitStatus;
+#[allow(deprecated)]
 use process_control::Terminator;
+
+mod common;
+use common::Handle;
 
 macro_rules! assert_matches {
     ( $result:expr , $expected_result:pat $(,)? ) => {{
@@ -93,6 +97,7 @@ fn assert_terminated(process: &mut Child) -> io::Result<()> {
     Ok(())
 }
 
+#[allow(deprecated)]
 #[track_caller]
 unsafe fn assert_not_found(terminator: &Terminator) {
     assert_eq!(
@@ -114,16 +119,16 @@ macro_rules! test {
         $type:ident : $limit:expr ,
         $($token:tt)*
     ) => {{
-        let mut terminator;
+        let mut handle;
         test!(
             @$type
             {
                 let process = $command.spawn()?;
-                terminator = process.terminator()?;
+                handle = Handle::new(&process)?;
                 process
             }.$method(),
             $limit,
-            terminator,
+            handle,
             $($token)*
         );
     }};
@@ -155,32 +160,35 @@ macro_rules! test {
         test!($control, $($token)*);
         test!($control.strict_errors(), $($token)*);
     }};
-    ( $control:expr , $terminator:expr , terminating: true, $($token:tt)* ) =>
-    {
+    ( $control:expr , $handle:expr , terminating: true, $($token:tt)* ) => {
         test!(
             $control.terminate_for_timeout(),
-            $terminator,
+            $handle,
             terminating: false,
             $($token)*
         )
     };
     (
         $control:expr ,
-        $terminator:expr ,
+        $handle:expr ,
         terminating: false ,
         expected_result: $expected_result:pat ,
-        run: | $terminator_var:ident | $body:expr ,
+        running: $running:expr ,
     ) => {{
         assert_matches!(
             $control.wait()?.map(|x| ExitStatus::from(x).code()),
             $expected_result,
         );
 
-        let $terminator_var = &$terminator;
-        let _: () = $body;
+        let running = $running;
+        if running {
+            thread::sleep(SHORT_TIME_LIMIT);
+        }
+        assert_eq!(running, unsafe { $handle.is_running()? });
     }};
 }
 
+#[allow(deprecated)]
 #[test]
 fn test_terminate() -> io::Result<()> {
     let mut process = create_time_limit_command(LONG_TIME_LIMIT).spawn()?;
@@ -207,7 +215,7 @@ fn test_time_limit() -> io::Result<()> {
         time_limit: LONG_TIME_LIMIT,
         terminating: false,
         expected_result: Some(Some(0)),
-        run: |terminator| unsafe { assert_not_found(terminator) },
+        running: false,
     )
 }
 
@@ -218,10 +226,7 @@ fn test_time_limit_expired() -> io::Result<()> {
         time_limit: SHORT_TIME_LIMIT,
         terminating: false,
         expected_result: None,
-        run: |terminator| {
-            thread::sleep(SHORT_TIME_LIMIT);
-            unsafe { terminator.terminate() }?;
-        },
+        running: true,
     )
 }
 
@@ -232,7 +237,7 @@ fn test_terminating_time_limit() -> io::Result<()> {
         time_limit: LONG_TIME_LIMIT,
         terminating: true,
         expected_result: Some(Some(0)),
-        run: |terminator| unsafe { assert_not_found(terminator) },
+        running: false,
     )
 }
 
@@ -243,7 +248,7 @@ fn test_terminating_time_limit_expired() -> io::Result<()> {
         time_limit: SHORT_TIME_LIMIT,
         terminating: true,
         expected_result: None,
-        run: |terminator| unsafe { assert_not_found(terminator) },
+        running: false,
     )
 }
 
@@ -255,7 +260,7 @@ if_memory_limit! {
             memory_limit: 2 * MEMORY_LIMIT,
             terminating: false,
             expected_result: Some(Some(0)),
-            run: |terminator| unsafe { assert_not_found(terminator) },
+            running: false,
         )
     }
 
@@ -266,7 +271,7 @@ if_memory_limit! {
             memory_limit: MEMORY_LIMIT,
             terminating: false,
             expected_result: Some(Some(1)),
-            run: |terminator| unsafe { assert_not_found(terminator) },
+            running: false,
         )
     }
 
@@ -290,7 +295,7 @@ if_memory_limit! {
             memory_limit: 0,
             terminating: false,
             expected_result: Some(memory_limit_0_result!()),
-            run: |terminator| unsafe { assert_not_found(terminator) },
+            running: false,
         )
     }
 
@@ -301,7 +306,7 @@ if_memory_limit! {
             memory_limit: 1,
             terminating: false,
             expected_result: Some(memory_limit_0_result!()),
-            run: |terminator| unsafe { assert_not_found(terminator) },
+            running: false,
         )
     }
 }
@@ -316,7 +321,7 @@ fn test_stdin() -> io::Result<()> {
         time_limit: LONG_TIME_LIMIT,
         terminating: false,
         expected_result: Some(Some(0)),
-        run: |terminator| unsafe { assert_not_found(terminator) },
+        running: false,
     )
 }
 

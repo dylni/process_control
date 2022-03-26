@@ -330,7 +330,6 @@ impl SharedHandle {
 pub(super) struct DuplicatedHandle(RawPid);
 
 impl DuplicatedHandle {
-    #[allow(clippy::unnecessary_wraps)]
     pub(super) fn new(process: &Child) -> io::Result<Self> {
         Ok(Self(RawPid::new(process)))
     }

@@ -115,6 +115,7 @@ mod imp;
 /// A wrapper that stores enough information to terminate a process.
 ///
 /// Instances can only be constructed using [`ChildExt::terminator`].
+#[deprecated = "cannot be used safely and should be unnecessary"]
 #[derive(Debug)]
 pub struct Terminator(imp::DuplicatedHandle);
 
@@ -162,6 +163,7 @@ impl Terminator {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
+    #[deprecated = "cannot be used safely and should be unnecessary"]
     #[inline]
     pub unsafe fn terminate(&self) -> io::Result<()> {
         self.0.terminate()
@@ -437,6 +439,7 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
+    #[deprecated = "cannot be used safely and should be unnecessary"]
     fn terminator(&self) -> io::Result<Terminator>;
 
     /// Creates an instance of [`Control`] that yields [`ExitStatus`] for this
