@@ -168,6 +168,27 @@ impl Terminator {
     }
 }
 
+#[rustfmt::skip]
+macro_rules! unix_method {
+    ( $method:ident , $return_type:ty ) => {
+        #[doc = concat!(
+            "Equivalent to [`ExitStatusExt::",
+            stringify!($method),
+            "`][method].
+
+[method]: ::std::os::unix::process::ExitStatusExt::",
+            stringify!($method),
+        )]
+        #[cfg(any(unix, doc))]
+        #[cfg_attr(process_control_docs_rs, doc(cfg(unix)))]
+        #[inline]
+        #[must_use]
+        pub fn $method(&self) -> $return_type {
+            self.0.$method()
+        }
+    };
+}
+
 /// Equivalent to [`process::ExitStatus`] but allows for greater accuracy.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct ExitStatus(imp::ExitStatus);
@@ -188,16 +209,10 @@ impl ExitStatus {
         self.0.code().map(Into::into)
     }
 
-    /// Equivalent to [`ExitStatusExt::signal`].
-    ///
-    /// [`ExitStatusExt::signal`]: ::std::os::unix::process::ExitStatusExt::signal
-    #[cfg(any(unix, doc))]
-    #[cfg_attr(process_control_docs_rs, doc(cfg(unix)))]
-    #[inline]
-    #[must_use]
-    pub fn signal(self) -> Option<::std::os::raw::c_int> {
-        self.0.signal()
-    }
+    unix_method!(continued, bool);
+    unix_method!(core_dumped, bool);
+    unix_method!(signal, Option<::std::os::raw::c_int>);
+    unix_method!(stopped_signal, Option<::std::os::raw::c_int>);
 }
 
 impl Display for ExitStatus {

@@ -74,11 +74,10 @@ where
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-#[repr(C)]
 pub(super) struct ExitStatus(DWORD);
 
 impl ExitStatus {
-    pub(super) const fn success(self) -> bool {
+    pub(super) fn success(self) -> bool {
         self.0 == EXIT_SUCCESS
     }
 
