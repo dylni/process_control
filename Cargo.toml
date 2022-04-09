@@ -23,4 +23,4 @@ crossbeam-channel = { version = "0.5", optional = true }
 libc = "0.2.120"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.34", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_WindowsProgramming"] }
+windows-sys = { version = "0.35", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_WindowsProgramming"] }
