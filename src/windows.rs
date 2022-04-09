@@ -315,8 +315,8 @@ impl DuplicatedHandle {
 
     pub(super) unsafe fn terminate(&self) -> io::Result<()> {
         self.0.terminate().map_err(|error| {
-            // This error is usually decoded to [ErrorKind::Other]:
-            // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/mod.rs#L55-L82
+            // This error is usually decoded to [ErrorKind::Uncategorized]:
+            // https://github.com/rust-lang/rust/blob/11381a5a3a84ab1915d8c2a7ce369d4517c662a0/library/std/src/sys/windows/mod.rs#L63-L128
             if self.0.is_not_running_error(&error)
                 || raw_os_error(&error) == Some(ERROR_INVALID_HANDLE)
             {

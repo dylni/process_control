@@ -41,7 +41,7 @@ if_memory_limit! {
 
 macro_rules! static_assert {
     ( $condition:expr ) => {
-        const _: () = [()][if $condition { 0 } else { 1 }];
+        const _: () = assert!($condition, "static assertion failed");
     };
 }
 
@@ -140,12 +140,25 @@ impl From<process::ExitStatus> for ExitStatus {
         } else if let Some(signal) = value.signal() {
             Self {
                 value: signal,
-                kind: ExitStatusKind::Killed,
+                kind: if value.core_dumped() {
+                    ExitStatusKind::Dumped
+                } else {
+                    ExitStatusKind::Killed
+                },
+            }
+        } else if let Some(signal) = value.stopped_signal() {
+            Self {
+                value: signal,
+                kind: ExitStatusKind::Stopped,
             }
         } else {
             Self {
-                value: -1,
-                kind: ExitStatusKind::Uncategorized,
+                value: value.into_raw(),
+                kind: if value.continued() {
+                    ExitStatusKind::Continued
+                } else {
+                    ExitStatusKind::Uncategorized
+                },
             }
         }
     }
@@ -337,8 +350,8 @@ impl DuplicatedHandle {
     #[rustfmt::skip]
     pub(super) unsafe fn terminate(&self) -> io::Result<()> {
         check_syscall(libc::kill(self.0.0, SIGKILL)).map_err(|error| {
-            // This error is usually decoded to [ErrorKind::Other]:
-            // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/mod.rs#L100-L123
+            // This error is usually decoded to [ErrorKind::Uncategorized]:
+            // https://github.com/rust-lang/rust/blob/11381a5a3a84ab1915d8c2a7ce369d4517c662a0/library/std/src/sys/unix/mod.rs#L138-L185
             if error.raw_os_error() == Some(ESRCH) {
                 io::Error::new(io::ErrorKind::NotFound, "No such process")
             } else {

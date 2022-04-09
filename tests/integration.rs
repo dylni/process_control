@@ -142,19 +142,13 @@ macro_rules! test {
     }};
     ( @time_limit $control:expr , $limit:expr , $($token:tt)* ) => {{
         test!(@strict_errors $control.time_limit($limit), $($token)*);
-        #[cfg(any(
-            target_os = "android",
-            all(
-                target_os = "linux",
-                any(target_env = "gnu", target_env = "musl"),
-            ),
-            windows,
-        ))]
-        test!(
-            @strict_errors
-            $control.time_limit($limit).memory_limit(MEMORY_LIMIT),
-            $($token)*
-        );
+        if_memory_limit! {
+            test!(
+                @strict_errors
+                $control.time_limit($limit).memory_limit(MEMORY_LIMIT),
+                $($token)*
+            );
+        }
     }};
     ( @strict_errors $control:expr , $($token:tt)* ) => {{
         test!($control, $($token)*);
