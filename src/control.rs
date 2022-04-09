@@ -11,6 +11,7 @@ use super::Control;
 use super::ExitStatus;
 use super::Output;
 use super::Timeout;
+use super::WaitResult;
 
 macro_rules! r#impl {
     (
@@ -39,7 +40,7 @@ macro_rules! r#impl {
                 }
             }
 
-            fn run_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+            fn run_wait(&mut self) -> WaitResult<ExitStatus> {
                 // Check if the exit status was already captured.
                 let result = self.process.try_wait();
                 if let Ok(Some(exit_status)) = result {
@@ -80,7 +81,7 @@ macro_rules! r#impl {
             }
 
             #[inline]
-            fn wait(mut self) -> io::Result<Option<Self::Result>> {
+            fn wait(mut self) -> WaitResult<Self::Result> {
                 let _ = self.process.stdin.take();
                 let mut result = $wait_fn(&mut self);
 
@@ -145,7 +146,7 @@ macro_rules! r#impl {
             }
 
             #[inline]
-            fn wait(self) -> io::Result<Option<Self::Result>> {
+            fn wait(self) -> WaitResult<Self::Result> {
                 self.0.wait()
             }
         }
@@ -161,7 +162,7 @@ r#impl!(
 );
 
 impl OutputControl {
-    fn run_wait_with_output(&mut self) -> io::Result<Option<Output>> {
+    fn run_wait_with_output(&mut self) -> WaitResult<Output> {
         let stdout_reader = spawn_reader(&mut self.process.stdout)?;
         let stderr_reader = spawn_reader(&mut self.process.stderr)?;
 

@@ -35,6 +35,8 @@ use windows_sys::Win32::System::Threading::IO_COUNTERS;
 use windows_sys::Win32::System::Threading::WAIT_OBJECT_0;
 use windows_sys::Win32::System::WindowsProgramming::INFINITE;
 
+use super::WaitResult;
+
 mod exit_status;
 pub(super) use exit_status::ExitStatus;
 
@@ -228,7 +230,7 @@ impl SharedHandle {
         })
     }
 
-    pub(super) fn wait(&mut self) -> io::Result<Option<ExitStatus>> {
+    pub(super) fn wait(&mut self) -> WaitResult<ExitStatus> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/process.rs#L334-L344
 
         self.set_memory_limit()?;

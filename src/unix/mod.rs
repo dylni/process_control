@@ -19,6 +19,8 @@ use libc::WEXITED;
 use libc::WNOWAIT;
 use libc::WSTOPPED;
 
+use super::WaitResult;
+
 mod exit_status;
 pub(super) use exit_status::ExitStatus;
 
@@ -55,7 +57,7 @@ fn check_syscall(result: c_int) -> io::Result<()> {
 pub(super) fn run_with_time_limit<F, R>(
     run_fn: F,
     time_limit: Option<Duration>,
-) -> io::Result<Option<R>>
+) -> WaitResult<R>
 where
     F: 'static + FnOnce() -> R + Send,
     R: 'static + Send,
@@ -171,7 +173,7 @@ impl SharedHandle {
         }
     }
 
-    pub(super) fn wait(&mut self) -> io::Result<Option<ExitStatus>> {
+    pub(super) fn wait(&mut self) -> WaitResult<ExitStatus> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/process/process_unix.rs#L432-L441
 
         #[cfg(any(

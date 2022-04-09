@@ -113,6 +113,8 @@ mod control;
 #[cfg_attr(windows, path = "windows/mod.rs")]
 mod imp;
 
+type WaitResult<T> = io::Result<Option<T>>;
+
 /// A wrapper that stores enough information to terminate a process.
 ///
 /// Instances can only be constructed using [`ChildExt::terminator`].
@@ -345,7 +347,7 @@ pub trait Control: private::Sealed {
     /// internally.
     ///
     /// [`terminate_for_timeout`]: Self::terminate_for_timeout
-    fn wait(self) -> io::Result<Option<Self::Result>>;
+    fn wait(self) -> WaitResult<Self::Result>;
 }
 
 /// A temporary wrapper for a process timeout.
@@ -397,7 +399,7 @@ pub trait Timeout: private::Sealed {
     ///
     /// [`terminating`]: Self::terminating
     #[deprecated = "use `Control::wait` instead"]
-    fn wait(self) -> io::Result<Option<Self::Result>>;
+    fn wait(self) -> WaitResult<Self::Result>;
 }
 
 /// Extensions to [`Child`] for easily terminating processes.
