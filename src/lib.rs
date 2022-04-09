@@ -442,6 +442,14 @@ pub trait ChildExt<'a>: private::Sealed {
     #[deprecated = "cannot be used safely and should be unnecessary"]
     fn terminator(&self) -> io::Result<Terminator>;
 
+    /// Equivalent to [`Child::kill`] but ignores errors when the process is no
+    /// longer running.
+    ///
+    /// Windows and Unix errors are inconsistent when terminating processes.
+    /// This method unifies them by simulating Unix behavior on Windows.
+    #[allow(clippy::missing_errors_doc)]
+    fn terminate_if_running(&mut self) -> io::Result<()>;
+
     /// Creates an instance of [`Control`] that yields [`ExitStatus`] for this
     /// process.
     ///
@@ -579,6 +587,11 @@ impl<'a> ChildExt<'a> for Child {
     #[inline]
     fn terminator(&self) -> io::Result<Terminator> {
         imp::DuplicatedHandle::new(self).map(Terminator)
+    }
+
+    #[inline]
+    fn terminate_if_running(&mut self) -> io::Result<()> {
+        imp::terminate_if_running(self)
     }
 
     #[inline]

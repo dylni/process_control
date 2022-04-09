@@ -190,7 +190,7 @@ macro_rules! test {
 
 #[allow(deprecated)]
 #[test]
-fn test_terminate() -> io::Result<()> {
+fn test_deprecated_terminate() -> io::Result<()> {
     let mut process = create_time_limit_command(LONG_TIME_LIMIT).spawn()?;
     let terminator = process.terminator()?;
 
@@ -365,4 +365,23 @@ fn test_large_output() -> io::Result<()> {
         assert_eq!(OUTPUT_LENGTH, output.len());
         assert!(output.into_iter().all(|x| x == byte));
     }
+}
+
+#[test]
+fn test_terminate_if_running() -> io::Result<()> {
+    let mut process = create_time_limit_command(LONG_TIME_LIMIT).spawn()?;
+
+    process.terminate_if_running()?;
+    process.terminate_if_running()?;
+
+    thread::sleep(SHORT_TIME_LIMIT);
+
+    process.terminate_if_running()?;
+    if cfg!(windows) {
+        assert!(process.kill().is_err());
+    } else {
+        process.kill()?;
+    }
+
+    Ok(())
 }

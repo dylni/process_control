@@ -85,27 +85,27 @@ macro_rules! r#impl {
                 let mut result = $wait_fn(&mut self);
 
                 macro_rules! try_run {
-                    ( $result:expr ) => {
-                        let next_result = $result;
-                        if self.strict_errors && result.is_ok() {
-                            if let Err(error) = next_result {
+                    ( $get_result_fn:expr ) => {
+                        if result.is_ok() {
+                            if let Err(error) = $get_result_fn() {
                                 result = Err(error);
                             }
                         }
                     };
                 }
 
-                if self.terminate_for_timeout {
-                    // If the process exited normally, identifier reuse might
-                    // cause a different process to be terminated.
-                    if !matches!(result, Ok(Some(_))) {
-                        try_run!(self
-                            .process
-                            .kill()
-                            .and_then(|()| self.process.wait()));
+                // If the process exited normally, identifier reuse might cause
+                // a different process to be terminated.
+                if self.terminate_for_timeout && !matches!(result, Ok(Some(_)))
+                {
+                    let next_result =
+                        imp::terminate_if_running(&mut self.process)
+                            .and_then(|()| self.process.wait());
+                    if self.strict_errors {
+                        try_run!(|| next_result);
                     }
                 }
-                try_run!(self.process.try_wait());
+                try_run!(|| self.process.try_wait());
 
                 result
             }

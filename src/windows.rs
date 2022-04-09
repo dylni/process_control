@@ -125,30 +125,25 @@ impl RawHandle {
     }
 
     unsafe fn terminate(&self) -> io::Result<()> {
-        let result = check_syscall(TerminateProcess(self.0, 1));
-        if let Err(error) = &result {
-            if let Some(error_code) = raw_os_error(error) {
-                let not_found = match error_code {
-                    ERROR_ACCESS_DENIED => {
-                        matches!(
-                            self.get_exit_code(),
-                            Ok(x) if x.try_into() != Ok(STILL_ACTIVE),
-                        )
-                    }
-                    // This error is usually decoded to [ErrorKind::Other]:
-                    // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/mod.rs#L55-L82
-                    ERROR_INVALID_HANDLE => true,
-                    _ => false,
-                };
-                if not_found {
-                    return Err(io::Error::new(
-                        io::ErrorKind::NotFound,
-                        "The handle is invalid.",
-                    ));
-                }
+        check_syscall(TerminateProcess(self.0, 1))
+    }
+
+    unsafe fn is_not_running_error(&self, error: &io::Error) -> bool {
+        raw_os_error(error) == Some(ERROR_ACCESS_DENIED)
+            && matches!(
+                self.get_exit_code(),
+                Ok(x) if x.try_into() != Ok(STILL_ACTIVE),
+            )
+    }
+
+    unsafe fn terminate_if_running(&self) -> io::Result<()> {
+        self.terminate().or_else(|error| {
+            if self.is_not_running_error(&error) {
+                Ok(())
+            } else {
+                Err(error)
             }
-        }
-        result
+        })
     }
 }
 
@@ -319,7 +314,20 @@ impl DuplicatedHandle {
     }
 
     pub(super) unsafe fn terminate(&self) -> io::Result<()> {
-        self.0.terminate()
+        self.0.terminate().map_err(|error| {
+            // This error is usually decoded to [ErrorKind::Other]:
+            // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/mod.rs#L55-L82
+            if self.0.is_not_running_error(&error)
+                || raw_os_error(&error) == Some(ERROR_INVALID_HANDLE)
+            {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "The handle is invalid.",
+                )
+            } else {
+                error
+            }
+        })
     }
 }
 
@@ -328,4 +336,8 @@ impl Drop for DuplicatedHandle {
         #[rustfmt::skip]
         let _ = unsafe { CloseHandle(self.0.0) };
     }
+}
+
+pub(super) fn terminate_if_running(process: &mut Child) -> io::Result<()> {
+    unsafe { RawHandle::new(process).terminate_if_running() }
 }

@@ -347,3 +347,7 @@ impl DuplicatedHandle {
         })
     }
 }
+
+pub(super) fn terminate_if_running(process: &mut Child) -> io::Result<()> {
+    process.kill()
+}
