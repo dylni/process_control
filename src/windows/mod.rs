@@ -5,11 +5,14 @@ use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::io;
+use std::iter::FusedIterator;
 use std::mem;
+use std::num::NonZeroU32;
 use std::os::windows::io::AsRawHandle;
 use std::process::Child;
 use std::ptr;
 use std::time::Duration;
+use std::time::Instant;
 
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::DuplicateHandle;
@@ -60,6 +63,7 @@ macro_rules! assert_matches {
 type BOOL = i32;
 #[allow(clippy::upper_case_acronyms)]
 type DWORD = u32;
+type NonZeroDword = NonZeroU32;
 
 const EXIT_SUCCESS: DWORD = 0;
 const TRUE: BOOL = 1;
@@ -152,6 +156,42 @@ impl Drop for JobHandle {
     }
 }
 
+struct TimeLimits<'a> {
+    handle: &'a SharedHandle,
+    start: Instant,
+}
+
+impl FusedIterator for TimeLimits<'_> {}
+
+impl Iterator for TimeLimits<'_> {
+    type Item = NonZeroDword;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let time_limit = if let Some(time_limit) = self.handle.time_limit {
+            time_limit
+        } else {
+            const NON_ZERO_INFINITE: NonZeroDword =
+                if let Some(result) = NonZeroDword::new(INFINITE) {
+                    result
+                } else {
+                    unreachable!();
+                };
+
+            return Some(NON_ZERO_INFINITE);
+        };
+
+        let mut time_limit = time_limit
+            .saturating_sub(self.start.elapsed())
+            .as_millis()
+            .try_into()
+            .unwrap_or(DWORD::MAX);
+        if time_limit == INFINITE {
+            time_limit -= 1;
+        }
+        NonZeroDword::new(time_limit)
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct SharedHandle {
     handle: RawHandle,
@@ -230,31 +270,37 @@ impl SharedHandle {
         })
     }
 
+    fn time_limits(&self) -> TimeLimits<'_> {
+        TimeLimits {
+            handle: self,
+            start: Instant::now(),
+        }
+    }
+
     pub(super) fn wait(&mut self) -> WaitResult<ExitStatus> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/process.rs#L334-L344
 
         self.set_memory_limit()?;
 
-        let mut remaining_time_limit = self
-            .time_limit
-            .map(|x| x.as_millis())
-            .unwrap_or_else(|| INFINITE.into());
-        while remaining_time_limit > 0 {
-            let time_limit =
-                remaining_time_limit.try_into().unwrap_or(DWORD::MAX);
-
+        let mut time_limits = self.time_limits();
+        let mut time_limit =
+            time_limits.next().map(NonZeroDword::get).unwrap_or(0);
+        loop {
             match unsafe { WaitForSingleObject(self.handle.0, time_limit) } {
                 WAIT_OBJECT_0 => {
-                    return unsafe { self.handle.get_exit_code() }
+                    break unsafe { self.handle.get_exit_code() }
                         .map(|x| Some(ExitStatus::new(x)));
                 }
-                WAIT_TIMEOUT => {}
-                _ => return Err(io::Error::last_os_error()),
+                WAIT_TIMEOUT => {
+                    time_limit = if let Some(time_limit) = time_limits.next() {
+                        time_limit.get()
+                    } else {
+                        break Ok(None);
+                    };
+                }
+                _ => break Err(io::Error::last_os_error()),
             }
-
-            remaining_time_limit -= u128::from(time_limit);
         }
-        Ok(None)
     }
 }
 
