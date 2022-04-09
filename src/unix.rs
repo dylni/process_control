@@ -277,15 +277,17 @@ impl SharedHandle {
                 .expect("`usize` too large for pointer width")
                 .into();
 
-            check_syscall(libc::prlimit(
-                self.pid.0,
-                resource,
-                &rlimit {
-                    rlim_cur: limit,
-                    rlim_max: limit,
-                },
-                ptr::null_mut(),
-            ))
+            check_syscall(unsafe {
+                libc::prlimit(
+                    self.pid.0,
+                    resource,
+                    &rlimit {
+                        rlim_cur: limit,
+                        rlim_max: limit,
+                    },
+                    ptr::null_mut(),
+                )
+            })
         }
     }
 
@@ -349,15 +351,17 @@ impl DuplicatedHandle {
 
     #[rustfmt::skip]
     pub(super) unsafe fn terminate(&self) -> io::Result<()> {
-        check_syscall(libc::kill(self.0.0, SIGKILL)).map_err(|error| {
-            // This error is usually decoded to [ErrorKind::Uncategorized]:
-            // https://github.com/rust-lang/rust/blob/11381a5a3a84ab1915d8c2a7ce369d4517c662a0/library/std/src/sys/unix/mod.rs#L138-L185
-            if error.raw_os_error() == Some(ESRCH) {
-                io::Error::new(io::ErrorKind::NotFound, "No such process")
-            } else {
-                error
-            }
-        })
+        check_syscall(unsafe { libc::kill(self.0.0, SIGKILL) }).map_err(
+            |error| {
+                // This error is usually decoded to [ErrorKind::Uncategorized]:
+                // https://github.com/rust-lang/rust/blob/11381a5a3a84ab1915d8c2a7ce369d4517c662a0/library/std/src/sys/unix/mod.rs#L138-L185
+                if error.raw_os_error() == Some(ESRCH) {
+                    io::Error::new(io::ErrorKind::NotFound, "No such process")
+                } else {
+                    error
+                }
+            },
+        )
     }
 }
 

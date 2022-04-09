@@ -45,7 +45,7 @@ impl Handle {
     }
 
     pub(crate) unsafe fn is_running(&self) -> io::Result<bool> {
-        match WaitForSingleObject(self.0, 0) {
+        match unsafe { WaitForSingleObject(self.0, 0) } {
             WAIT_OBJECT_0 => Ok(false),
             WAIT_TIMEOUT => Ok(true),
             _ => Err(io::Error::last_os_error()),

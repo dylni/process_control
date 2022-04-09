@@ -22,8 +22,8 @@ macro_rules! r#impl {
     ) => {
         #[derive(Debug)]
         pub struct $struct$(<$lifetime>)? {
-            process: $process_type,
             handle: imp::SharedHandle,
+            process: $process_type,
             strict_errors: bool,
             terminate_for_timeout: bool,
         }
@@ -160,16 +160,12 @@ r#impl!(
     Self::run_wait,
 );
 
-r#impl!(
-    OutputControl,
-    OutputTimeout,
-    Child,
-    Output,
-    |control: &mut Self| {
-        let stdout_reader = spawn_reader(&mut control.process.stdout)?;
-        let stderr_reader = spawn_reader(&mut control.process.stderr)?;
+impl OutputControl {
+    fn run_wait_with_output(&mut self) -> io::Result<Option<Output>> {
+        let stdout_reader = spawn_reader(&mut self.process.stdout)?;
+        let stderr_reader = spawn_reader(&mut self.process.stderr)?;
 
-        return control
+        return self
             .run_wait()?
             .map(|status| {
                 Ok(Output {
@@ -204,5 +200,13 @@ r#impl!(
                 .transpose()
                 .map(|x| x.unwrap_or_else(Vec::new))
         }
-    },
+    }
+}
+
+r#impl!(
+    OutputControl,
+    OutputTimeout,
+    Child,
+    Output,
+    Self::run_wait_with_output,
 );

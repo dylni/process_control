@@ -26,7 +26,7 @@ impl Handle {
     }
 
     pub(crate) unsafe fn is_running(&self) -> io::Result<bool> {
-        check_syscall(libc::kill(self.as_pid(), 0))
+        check_syscall(unsafe { libc::kill(self.as_pid(), 0) })
             .map(|()| true)
             .or_else(|error| {
                 if error.raw_os_error() == Some(ESRCH) {

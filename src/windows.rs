@@ -38,6 +38,21 @@ use windows_sys::Win32::System::Threading::IO_COUNTERS;
 use windows_sys::Win32::System::Threading::WAIT_OBJECT_0;
 use windows_sys::Win32::System::WindowsProgramming::INFINITE;
 
+macro_rules! assert_matches {
+    ( $result:expr , $expected_result:pat $(,)? ) => {{
+        let result = $result;
+        if !matches!(result, $expected_result) {
+            panic!(
+                "assertion failed: `(left matches right)`
+  left: `{:?}`
+ right: `{:?}`",
+                result,
+                stringify!($expected_result),
+            );
+        }
+    }};
+}
+
 // https://github.com/microsoft/windows-rs/issues/881
 #[allow(clippy::upper_case_acronyms)]
 type BOOL = i32;
@@ -46,32 +61,6 @@ type DWORD = u32;
 
 const EXIT_SUCCESS: DWORD = 0;
 const TRUE: BOOL = 1;
-
-trait ReplaceNone<T> {
-    fn replace_none(&self, value: T);
-}
-
-impl<T> ReplaceNone<T> for Cell<Option<T>>
-where
-    T: Debug,
-{
-    fn replace_none(&self, value: T) {
-        let replaced = self.replace(Some(value));
-        if let Some(replaced) = replaced {
-            fail(&replaced);
-        }
-
-        #[inline(never)]
-        #[cold]
-        #[track_caller]
-        fn fail(replaced: &dyn Debug) -> ! {
-            panic!(
-                "called `Cell::replace_none()` on a `Some` value: {:?}",
-                replaced,
-            );
-        }
-    }
-}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(super) struct ExitStatus(DWORD);
@@ -120,25 +109,25 @@ impl RawHandle {
 
     unsafe fn get_exit_code(&self) -> io::Result<DWORD> {
         let mut exit_code = 0;
-        check_syscall(GetExitCodeProcess(self.0, &mut exit_code))?;
+        check_syscall(unsafe { GetExitCodeProcess(self.0, &mut exit_code) })?;
         Ok(exit_code)
     }
 
     unsafe fn terminate(&self) -> io::Result<()> {
-        check_syscall(TerminateProcess(self.0, 1))
+        check_syscall(unsafe { TerminateProcess(self.0, 1) })
     }
 
     unsafe fn is_not_running_error(&self, error: &io::Error) -> bool {
         raw_os_error(error) == Some(ERROR_ACCESS_DENIED)
             && matches!(
-                self.get_exit_code(),
+                unsafe { self.get_exit_code() },
                 Ok(x) if x.try_into() != Ok(STILL_ACTIVE),
             )
     }
 
     unsafe fn terminate_if_running(&self) -> io::Result<()> {
-        self.terminate().or_else(|error| {
-            if self.is_not_running_error(&error) {
+        unsafe { self.terminate() }.or_else(|error| {
+            if unsafe { self.is_not_running_error(&error) } {
                 Ok(())
             } else {
                 Err(error)
@@ -152,10 +141,21 @@ impl RawHandle {
 unsafe impl Send for RawHandle {}
 unsafe impl Sync for RawHandle {}
 
-struct JobHandle(Cell<Option<RawHandle>>);
+struct JobHandle(Option<RawHandle>);
 
 impl JobHandle {
-    fn close(&self) -> io::Result<()> {
+    fn init(&mut self) -> io::Result<&RawHandle> {
+        assert_matches!(&self.0, None);
+
+        let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null_mut()) };
+        if handle == 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        Ok(self.0.insert(RawHandle(handle)))
+    }
+
+    fn close(&mut self) -> io::Result<()> {
         if let Some(handle) = self.0.take() {
             check_syscall(unsafe { CloseHandle(handle.0) })?;
         }
@@ -166,6 +166,12 @@ impl JobHandle {
 impl Debug for JobHandle {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Debug::fmt(any::type_name::<Cell<Option<RawHandle>>>(), f)
+    }
+}
+
+impl Drop for JobHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
     }
 }
 
@@ -183,7 +189,7 @@ impl SharedHandle {
             handle: RawHandle::new(process),
             memory_limit: None,
             time_limit: None,
-            job_handle: JobHandle(Cell::new(None)),
+            job_handle: JobHandle(None),
         }
     }
 
@@ -196,13 +202,7 @@ impl SharedHandle {
             return Ok(());
         };
 
-        let job_handle =
-            unsafe { CreateJobObjectW(ptr::null(), ptr::null_mut()) };
-        if job_handle == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        self.job_handle.0.replace_none(RawHandle(job_handle));
-
+        let job_handle = self.job_handle.init()?;
         let job_information = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
             BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION {
                 PerProcessUserTimeLimit: 0,
@@ -231,7 +231,7 @@ impl SharedHandle {
         let job_information_ptr: *const _ = &job_information;
         let result = check_syscall(unsafe {
             SetInformationJobObject(
-                job_handle,
+                job_handle.0,
                 JobObjectExtendedLimitInformation,
                 job_information_ptr.cast(),
                 mem::size_of_val(&job_information)
@@ -239,22 +239,17 @@ impl SharedHandle {
                     .expect("job information too large for WinAPI"),
             )
         });
-        match result {
-            Ok(()) => {}
+        if let Err(error) = &result {
             // This error will occur when the job has a low memory limit.
-            Err(ref error) => {
-                return if raw_os_error(error) == Some(ERROR_INVALID_PARAMETER)
-                {
-                    self.job_handle.close()?;
-                    unsafe { self.handle.terminate() }
-                } else {
-                    result
-                };
-            }
+            return if raw_os_error(error) == Some(ERROR_INVALID_PARAMETER) {
+                unsafe { self.handle.terminate() }
+            } else {
+                result
+            };
         }
 
         check_syscall(unsafe {
-            AssignProcessToJobObject(job_handle, self.handle.0)
+            AssignProcessToJobObject(job_handle.0, self.handle.0)
         })
     }
 
@@ -286,12 +281,6 @@ impl SharedHandle {
     }
 }
 
-impl Drop for SharedHandle {
-    fn drop(&mut self) {
-        let _ = self.job_handle.close();
-    }
-}
-
 #[derive(Debug)]
 pub(super) struct DuplicatedHandle(RawHandle);
 
@@ -314,10 +303,10 @@ impl DuplicatedHandle {
     }
 
     pub(super) unsafe fn terminate(&self) -> io::Result<()> {
-        self.0.terminate().map_err(|error| {
+        unsafe { self.0.terminate() }.map_err(|error| {
             // This error is usually decoded to [ErrorKind::Uncategorized]:
             // https://github.com/rust-lang/rust/blob/11381a5a3a84ab1915d8c2a7ce369d4517c662a0/library/std/src/sys/windows/mod.rs#L63-L128
-            if self.0.is_not_running_error(&error)
+            if unsafe { self.0.is_not_running_error(&error) }
                 || raw_os_error(&error) == Some(ERROR_INVALID_HANDLE)
             {
                 io::Error::new(

@@ -80,6 +80,7 @@
 // This is a private option that should not be used.
 // https://github.com/rust-lang/docs.rs/issues/147#issuecomment-389544407
 #![cfg_attr(process_control_docs_rs, feature(doc_cfg))]
+#![warn(unsafe_op_in_unsafe_fn)]
 #![warn(unused_results)]
 
 use std::fmt;
@@ -166,7 +167,8 @@ impl Terminator {
     #[deprecated = "cannot be used safely and should be unnecessary"]
     #[inline]
     pub unsafe fn terminate(&self) -> io::Result<()> {
-        self.0.terminate()
+        // SAFETY: The safety requirements are documented.
+        unsafe { self.0.terminate() }
     }
 }
 

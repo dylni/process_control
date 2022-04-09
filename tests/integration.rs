@@ -54,14 +54,15 @@ if_memory_limit! {
 }
 
 fn create_time_limit_command(seconds: Duration) -> Command {
-    assert_eq!(0, seconds.subsec_millis());
+    let whole_seconds = seconds.as_secs();
+    assert_eq!(seconds, Duration::from_secs(whole_seconds));
 
     let mut command = Command::new("perl");
     let _ = command
         .arg("-e")
         .arg("sleep $ARGV[0]")
         .arg("--")
-        .arg(seconds.as_secs().to_string());
+        .arg(whole_seconds.to_string());
     command
 }
 
