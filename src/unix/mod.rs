@@ -1,13 +1,8 @@
 use std::convert::TryInto;
-use std::fmt;
-use std::fmt::Display;
-use std::fmt::Formatter;
 use std::io;
 use std::mem;
 use std::mem::MaybeUninit;
 use std::os::raw::c_int;
-use std::os::unix::process::ExitStatusExt;
-use std::process;
 use std::process::Child;
 use std::thread;
 use std::time::Duration;
@@ -16,20 +11,16 @@ use std::time::Duration;
 use libc::__rlimit_resource_t;
 use libc::id_t;
 use libc::pid_t;
-use libc::CLD_CONTINUED;
-use libc::CLD_DUMPED;
-use libc::CLD_EXITED;
-use libc::CLD_KILLED;
-use libc::CLD_STOPPED;
-use libc::CLD_TRAPPED;
 use libc::EINTR;
 use libc::ESRCH;
-use libc::EXIT_SUCCESS;
 use libc::P_PID;
 use libc::SIGKILL;
 use libc::WEXITED;
 use libc::WNOWAIT;
 use libc::WSTOPPED;
+
+mod exit_status;
+pub(super) use exit_status::ExitStatus;
 
 if_memory_limit! {
     use std::convert::TryFrom;
@@ -52,117 +43,6 @@ macro_rules! static_assert {
 type LimitResource = c_int;
 #[cfg(all(target_env = "gnu", target_os = "linux"))]
 type LimitResource = __rlimit_resource_t;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ExitStatusKind {
-    Continued,
-    Dumped,
-    Exited,
-    Killed,
-    Stopped,
-    Trapped,
-    Uncategorized,
-}
-
-impl ExitStatusKind {
-    const fn new(raw: c_int) -> Self {
-        match raw {
-            CLD_CONTINUED => Self::Continued,
-            CLD_DUMPED => Self::Dumped,
-            CLD_EXITED => Self::Exited,
-            CLD_KILLED => Self::Killed,
-            CLD_STOPPED => Self::Stopped,
-            CLD_TRAPPED => Self::Trapped,
-            _ => Self::Uncategorized,
-        }
-    }
-}
-
-macro_rules! code_method {
-    ( $method:ident , $($kind_token:tt)+ ) => {
-        pub(super) fn $method(self) -> Option<c_int> {
-            matches!(self.kind, $($kind_token)+).then(|| self.value)
-        }
-    };
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(super) struct ExitStatus {
-    value: c_int,
-    kind: ExitStatusKind,
-}
-
-impl ExitStatus {
-    pub(super) fn success(self) -> bool {
-        self.code() == Some(EXIT_SUCCESS)
-    }
-
-    pub(super) const fn continued(self) -> bool {
-        matches!(self.kind, ExitStatusKind::Continued)
-    }
-
-    pub(super) const fn core_dumped(self) -> bool {
-        matches!(self.kind, ExitStatusKind::Dumped)
-    }
-
-    code_method!(code, ExitStatusKind::Exited);
-    code_method!(signal, ExitStatusKind::Dumped | ExitStatusKind::Killed);
-    code_method!(stopped_signal, ExitStatusKind::Stopped);
-}
-
-impl Display for ExitStatus {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            ExitStatusKind::Continued => write!(f, "continued (WIFCONTINUED)"),
-            ExitStatusKind::Dumped => {
-                write!(f, "signal: {} (core dumped)", self.value)
-            }
-            ExitStatusKind::Exited => write!(f, "exit code: {}", self.value),
-            ExitStatusKind::Killed => write!(f, "signal: {}", self.value),
-            ExitStatusKind::Stopped => {
-                write!(f, "stopped (not terminated) by signal: {}", self.value)
-            }
-            ExitStatusKind::Trapped => write!(f, "trapped"),
-            ExitStatusKind::Uncategorized => {
-                write!(f, "uncategorized wait status: {}", self.value)
-            }
-        }
-    }
-}
-
-impl From<process::ExitStatus> for ExitStatus {
-    fn from(value: process::ExitStatus) -> Self {
-        if let Some(exit_code) = value.code() {
-            Self {
-                value: exit_code,
-                kind: ExitStatusKind::Exited,
-            }
-        } else if let Some(signal) = value.signal() {
-            Self {
-                value: signal,
-                kind: if value.core_dumped() {
-                    ExitStatusKind::Dumped
-                } else {
-                    ExitStatusKind::Killed
-                },
-            }
-        } else if let Some(signal) = value.stopped_signal() {
-            Self {
-                value: signal,
-                kind: ExitStatusKind::Stopped,
-            }
-        } else {
-            Self {
-                value: value.into_raw(),
-                kind: if value.continued() {
-                    ExitStatusKind::Continued
-                } else {
-                    ExitStatusKind::Uncategorized
-                },
-            }
-        }
-    }
-}
 
 fn check_syscall(result: c_int) -> io::Result<()> {
     if result >= 0 {
@@ -321,11 +201,8 @@ impl SharedHandle {
                 });
                 match result {
                     Ok(()) => {
-                        let process_info =
-                            unsafe { process_info.assume_init() };
-                        break Ok(ExitStatus {
-                            value: unsafe { process_info.si_status() },
-                            kind: ExitStatusKind::new(process_info.si_code),
+                        break Ok(unsafe {
+                            ExitStatus::new(process_info.assume_init())
                         });
                     }
                     Err(error) => {

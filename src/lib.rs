@@ -109,8 +109,8 @@ macro_rules! if_memory_limit {
 
 mod control;
 
-#[cfg_attr(unix, path = "unix.rs")]
-#[cfg_attr(windows, path = "windows.rs")]
+#[cfg_attr(unix, path = "unix/mod.rs")]
+#[cfg_attr(windows, path = "windows/mod.rs")]
 mod imp;
 
 /// A wrapper that stores enough information to terminate a process.

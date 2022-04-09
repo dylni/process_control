@@ -3,13 +3,10 @@ use std::cell::Cell;
 use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Debug;
-use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io;
 use std::mem;
 use std::os::windows::io::AsRawHandle;
-use std::os::windows::process::ExitStatusExt;
-use std::process;
 use std::process::Child;
 use std::ptr;
 use std::time::Duration;
@@ -38,6 +35,9 @@ use windows_sys::Win32::System::Threading::IO_COUNTERS;
 use windows_sys::Win32::System::Threading::WAIT_OBJECT_0;
 use windows_sys::Win32::System::WindowsProgramming::INFINITE;
 
+mod exit_status;
+pub(super) use exit_status::ExitStatus;
+
 macro_rules! assert_matches {
     ( $result:expr , $expected_result:pat $(,)? ) => {{
         let result = $result;
@@ -61,31 +61,6 @@ type DWORD = u32;
 
 const EXIT_SUCCESS: DWORD = 0;
 const TRUE: BOOL = 1;
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(super) struct ExitStatus(DWORD);
-
-impl ExitStatus {
-    pub(super) fn success(self) -> bool {
-        self.0 == EXIT_SUCCESS
-    }
-
-    pub(super) fn code(self) -> Option<DWORD> {
-        Some(self.0)
-    }
-}
-
-impl Display for ExitStatus {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(&process::ExitStatus::from_raw(self.0), f)
-    }
-}
-
-impl From<process::ExitStatus> for ExitStatus {
-    fn from(value: process::ExitStatus) -> Self {
-        Self(value.code().expect("process has no exit code") as u32)
-    }
-}
 
 fn raw_os_error(error: &io::Error) -> Option<DWORD> {
     error.raw_os_error().and_then(|x| x.try_into().ok())
@@ -165,7 +140,7 @@ impl JobHandle {
 
 impl Debug for JobHandle {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Debug::fmt(any::type_name::<Cell<Option<RawHandle>>>(), f)
+        any::type_name::<Cell<Option<RawHandle>>>().fmt(f)
     }
 }
 
@@ -269,7 +244,7 @@ impl SharedHandle {
             match unsafe { WaitForSingleObject(self.handle.0, time_limit) } {
                 WAIT_OBJECT_0 => {
                     return unsafe { self.handle.get_exit_code() }
-                        .map(|x| Some(ExitStatus(x)));
+                        .map(|x| Some(ExitStatus::new(x)));
                 }
                 WAIT_TIMEOUT => {}
                 _ => return Err(io::Error::last_os_error()),
