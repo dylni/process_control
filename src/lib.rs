@@ -84,6 +84,7 @@
 #![warn(unused_results)]
 
 use std::fmt;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io;
@@ -224,7 +225,7 @@ impl ExitStatus {
 impl Display for ExitStatus {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        Display::fmt(&self.0, f)
     }
 }
 
@@ -409,12 +410,12 @@ pub trait ChildExt<'a>: private::Sealed {
     /// The type returned by [`controlled`].
     ///
     /// [`controlled`]: Self::controlled
-    type ExitStatusControl: 'a + Control<Result = ExitStatus>;
+    type ExitStatusControl: 'a + Control<Result = ExitStatus> + Debug;
 
     /// The type returned by [`controlled_with_output`].
     ///
     /// [`controlled_with_output`]: Self::controlled_with_output
-    type OutputControl: Control<Result = Output>;
+    type OutputControl: Control<Result = Output> + Debug;
 
     /// The type returned by [`with_timeout`].
     ///
