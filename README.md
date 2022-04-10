@@ -23,7 +23,7 @@ Add the following lines to your "Cargo.toml" file:
 
 ```toml
 [dependencies]
-process_control = "3.3"
+process_control = "3.4"
 ```
 
 See the [documentation] for available functionality and examples.
@@ -39,7 +39,7 @@ crate's minor version:
 
 ```toml
 [dependencies]
-process_control = "~3.3"
+process_control = "~3.4"
 ```
 
 ## License
