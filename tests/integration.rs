@@ -107,6 +107,17 @@ unsafe fn assert_not_found(terminator: &Terminator) {
     );
 }
 
+#[cfg_attr(
+    not(any(
+        target_os = "android",
+        all(
+            target_os = "linux",
+            any(target_env = "gnu", target_env = "musl"),
+        ),
+        windows,
+    )),
+    allow(unused_macro_rules)
+)]
 macro_rules! test {
     ( command: $command:expr , $($token:tt)* ) => {{
         test!(@output $command, controlled, $($token)*);
