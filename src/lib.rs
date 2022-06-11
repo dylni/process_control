@@ -222,6 +222,20 @@ impl ExitStatus {
     unix_method!(stopped_signal, Option<::std::os::raw::c_int>);
 }
 
+impl AsMut<Self> for ExitStatus {
+    #[inline]
+    fn as_mut(&mut self) -> &mut Self {
+        self
+    }
+}
+
+impl AsRef<Self> for ExitStatus {
+    #[inline]
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
 impl Display for ExitStatus {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -249,6 +263,20 @@ pub struct Output {
 
     /// Equivalent to [`process::Output::stderr`].
     pub stderr: Vec<u8>,
+}
+
+impl AsMut<ExitStatus> for Output {
+    #[inline]
+    fn as_mut(&mut self) -> &mut ExitStatus {
+        &mut self.status
+    }
+}
+
+impl AsRef<ExitStatus> for Output {
+    #[inline]
+    fn as_ref(&self) -> &ExitStatus {
+        &self.status
+    }
 }
 
 impl From<process::Output> for Output {
