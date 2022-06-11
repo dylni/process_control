@@ -24,14 +24,7 @@ macro_rules! r#impl {
         #[derive(Debug)]
         pub struct $struct$(<$lifetime>)? {
             process: $process_type,
-            #[cfg(any(
-                target_os = "android",
-                all(
-                    target_os = "linux",
-                    any(target_env = "gnu", target_env = "musl"),
-                ),
-                windows,
-            ))]
+            #[cfg(process_control_memory_limit)]
             memory_limit: Option<usize>,
             time_limit: Option<Duration>,
             strict_errors: bool,
@@ -42,14 +35,7 @@ macro_rules! r#impl {
             pub(super) fn new(process: $process_type) -> Self {
                 Self {
                     process,
-                    #[cfg(any(
-                        target_os = "android",
-                        all(
-                            target_os = "linux",
-                            any(target_env = "gnu", target_env = "musl"),
-                        ),
-                        windows,
-                    ))]
+                    #[cfg(process_control_memory_limit)]
                     memory_limit: None,
                     time_limit: None,
                     strict_errors: false,
@@ -64,14 +50,7 @@ macro_rules! r#impl {
                 }
 
                 let mut handle = imp::Handle::new(&mut self.process);
-                #[cfg(any(
-                    target_os = "android",
-                    all(
-                        target_os = "linux",
-                        any(target_env = "gnu", target_env = "musl"),
-                    ),
-                    windows,
-                ))]
+                #[cfg(process_control_memory_limit)]
                 if let Some(memory_limit) = self.memory_limit {
                     handle.set_memory_limit(memory_limit)?;
                 }

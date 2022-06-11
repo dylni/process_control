@@ -5,14 +5,17 @@ use std::os::raw::c_int;
 use std::os::unix::process::ExitStatusExt;
 use std::process;
 
-use libc::siginfo_t;
-use libc::CLD_CONTINUED;
-use libc::CLD_DUMPED;
-use libc::CLD_EXITED;
-use libc::CLD_KILLED;
-use libc::CLD_STOPPED;
-use libc::CLD_TRAPPED;
 use libc::EXIT_SUCCESS;
+
+if_waitid! {
+    use libc::siginfo_t;
+    use libc::CLD_CONTINUED;
+    use libc::CLD_DUMPED;
+    use libc::CLD_EXITED;
+    use libc::CLD_KILLED;
+    use libc::CLD_STOPPED;
+    use libc::CLD_TRAPPED;
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExitStatusKind {
@@ -21,21 +24,23 @@ enum ExitStatusKind {
     Exited,
     Killed,
     Stopped,
+    #[cfg(process_control_waitid)]
     Trapped,
     Uncategorized,
 }
 
 impl ExitStatusKind {
-    #[cfg_attr(feature = "__unstable-force-missing-waitid", allow(dead_code))]
-    const fn new(raw: c_int) -> Self {
-        match raw {
-            CLD_CONTINUED => Self::Continued,
-            CLD_DUMPED => Self::Dumped,
-            CLD_EXITED => Self::Exited,
-            CLD_KILLED => Self::Killed,
-            CLD_STOPPED => Self::Stopped,
-            CLD_TRAPPED => Self::Trapped,
-            _ => Self::Uncategorized,
+    if_waitid! {
+        const fn new(raw: c_int) -> Self {
+            match raw {
+                CLD_CONTINUED => Self::Continued,
+                CLD_DUMPED => Self::Dumped,
+                CLD_EXITED => Self::Exited,
+                CLD_KILLED => Self::Killed,
+                CLD_STOPPED => Self::Stopped,
+                CLD_TRAPPED => Self::Trapped,
+                _ => Self::Uncategorized,
+            }
         }
     }
 }
@@ -55,11 +60,12 @@ pub(crate) struct ExitStatus {
 }
 
 impl ExitStatus {
-    #[cfg_attr(feature = "__unstable-force-missing-waitid", allow(dead_code))]
-    pub(super) unsafe fn new(process_info: siginfo_t) -> Self {
-        Self {
-            value: unsafe { process_info.si_status() },
-            kind: ExitStatusKind::new(process_info.si_code),
+    if_waitid! {
+        pub(super) unsafe fn new(process_info: siginfo_t) -> Self {
+            Self {
+                value: unsafe { process_info.si_status() },
+                kind: ExitStatusKind::new(process_info.si_code),
+            }
         }
     }
 
@@ -92,6 +98,7 @@ impl Display for ExitStatus {
             ExitStatusKind::Stopped => {
                 write!(f, "stopped (not terminated) by signal: {}", self.value)
             }
+            #[cfg(process_control_waitid)]
             ExitStatusKind::Trapped => write!(f, "trapped"),
             ExitStatusKind::Uncategorized => {
                 write!(f, "uncategorized wait status: {}", self.value)

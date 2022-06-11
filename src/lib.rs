@@ -95,14 +95,7 @@ use std::time::Duration;
 macro_rules! if_memory_limit {
     ( $($item:item)+ ) => {
         $(
-            #[cfg(any(
-                target_os = "android",
-                all(
-                    target_os = "linux",
-                    any(target_env = "gnu", target_env = "musl"),
-                ),
-                windows,
-            ))]
+            #[cfg(process_control_memory_limit)]
             $item
         )+
     };
@@ -122,6 +115,42 @@ const _: &str = env! {
     "__UNSTABLE_PROCESS_CONTROL_ALLOW_SIGNAL_HOOK_FEATURE",
     "The 'signal-hook' feature is private and will be removed.",
 };
+
+macro_rules! r#impl {
+    ( $short_name:ident , $long_cfg:expr , ) => {
+        const _: () = assert!(
+            cfg!($short_name) == $long_cfg,
+            concat!(
+                "The configuration option '",
+                stringify!($short_name),
+                "' is private.",
+            ),
+        );
+    };
+}
+r#impl!(
+    process_control_memory_limit,
+    cfg!(any(
+        target_os = "android",
+        all(
+            target_os = "linux",
+            any(target_env = "gnu", target_env = "musl"),
+        ),
+        windows,
+    )),
+);
+r#impl!(
+    process_control_waitid,
+    cfg!(not(any(
+        feature = "__unstable-force-missing-waitid",
+        target_os = "espidf",
+        target_os = "horizon",
+        target_os = "openbsd",
+        target_os = "redox",
+        target_os = "tvos",
+        target_os = "vxworks",
+    ))),
+);
 
 type WaitResult<T> = io::Result<Option<T>>;
 

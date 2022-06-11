@@ -20,33 +20,10 @@ macro_rules! check_result {
     }};
 }
 
-#[cfg_attr(
-    not(any(
-        feature = "__unstable-force-missing-waitid",
-        target_os = "espidf",
-        target_os = "horizon",
-        target_os = "openbsd",
-        target_os = "redox",
-        target_os = "tvos",
-        target_os = "vxworks",
-    )),
-    path = "waitid.rs"
-)]
-#[cfg_attr(
-    any(
-        feature = "__unstable-force-missing-waitid",
-        target_os = "espidf",
-        target_os = "horizon",
-        target_os = "openbsd",
-        target_os = "redox",
-        target_os = "tvos",
-        target_os = "vxworks",
-    ),
-    path = "common.rs"
-)]
+#[cfg_attr(process_control_waitid, path = "waitid.rs")]
+#[cfg_attr(not(process_control_waitid), path = "common.rs")]
 mod imp;
 pub(super) use imp::wait;
-pub(super) use imp::Process;
 
 pub(super) fn run_with_time_limit<F, R>(
     run_fn: F,

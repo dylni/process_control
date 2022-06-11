@@ -1,18 +1,26 @@
 use std::convert::TryInto;
 use std::io;
-use std::mem;
+use std::marker::PhantomData;
 use std::os::raw::c_int;
 use std::process::Child;
 use std::time::Duration;
 
 #[cfg(all(target_env = "gnu", target_os = "linux"))]
 use libc::__rlimit_resource_t;
-use libc::id_t;
 use libc::pid_t;
 use libc::ESRCH;
 use libc::SIGKILL;
 
 use super::WaitResult;
+
+macro_rules! if_waitid {
+    ( $($item:item)+ ) => {
+        $(
+            #[cfg(process_control_waitid)]
+            $item
+        )+
+    };
+}
 
 mod exit_status;
 pub(super) use exit_status::ExitStatus;
@@ -27,10 +35,18 @@ if_memory_limit! {
     use libc::RLIMIT_AS;
 }
 
-macro_rules! static_assert {
-    ( $condition:expr ) => {
-        const _: () = assert!($condition, "static assertion failed");
-    };
+if_waitid! {
+    use std::mem;
+
+    use libc::id_t;
+}
+
+if_waitid! {
+    macro_rules! static_assert {
+        ( $condition:expr $(,)? ) => {
+            const _: () = assert!($condition, "static assertion failed");
+        };
+    }
 }
 
 #[cfg(any(
@@ -41,7 +57,6 @@ type LimitResource = c_int;
 #[cfg(all(target_env = "gnu", target_os = "linux"))]
 type LimitResource = __rlimit_resource_t;
 
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn check_syscall(result: c_int) -> io::Result<()> {
     if result >= 0 {
         Ok(())
@@ -59,31 +74,33 @@ impl RawPid {
         Self(pid.try_into().expect("process identifier is invalid"))
     }
 
-    #[cfg_attr(feature = "__unstable-force-missing-waitid", allow(dead_code))]
-    const fn as_id(&self) -> id_t {
-        static_assert!(pid_t::MAX == i32::MAX);
-        static_assert!(mem::size_of::<pid_t>() <= mem::size_of::<id_t>());
+    if_waitid! {
+        const fn as_id(&self) -> id_t {
+            static_assert!(pid_t::MAX == i32::MAX);
+            static_assert!(mem::size_of::<pid_t>() <= mem::size_of::<id_t>());
 
-        self.0 as _
+            self.0 as _
+        }
     }
 }
 
 #[derive(Debug)]
 pub(super) struct Handle<'a> {
-    #[cfg_attr(
-        not(feature = "__unstable-force-missing-waitid"),
-        allow(dead_code)
-    )]
-    process: wait::Process<'a>,
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    #[cfg(not(process_control_waitid))]
+    process: &'a mut Child,
+    #[cfg(any(process_control_memory_limit, process_control_waitid))]
     pid: RawPid,
+    _marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Handle<'a> {
     pub(super) fn new(process: &'a mut Child) -> Self {
         Self {
+            #[cfg(any(process_control_memory_limit, process_control_waitid))]
             pid: RawPid::new(process),
-            process: wait::Process::new(process),
+            #[cfg(not(process_control_waitid))]
+            process,
+            _marker: PhantomData,
         }
     }
 
@@ -105,7 +122,7 @@ impl<'a> Handle<'a> {
 
             #[cfg_attr(
                 not(target_os = "freebsd"),
-                allow(clippy::useless_conversion),
+                allow(clippy::useless_conversion)
             )]
             let limit = PointerWidth::try_from(limit)
                 .expect("`usize` too large for pointer width")

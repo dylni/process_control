@@ -1,7 +1,6 @@
 use std::io;
 use std::mem;
 use std::mem::ManuallyDrop;
-use std::process::Child;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -15,15 +14,6 @@ use super::run_with_time_limit;
 
 use super::super::ExitStatus;
 use super::super::Handle;
-
-#[derive(Debug)]
-pub(in super::super) struct Process<'a>(&'a mut Child);
-
-impl<'a> Process<'a> {
-    pub(in super::super) fn new(process: &'a mut Child) -> Self {
-        Self(process)
-    }
-}
 
 // https://github.com/rust-lang/rust-clippy/issues/3340
 #[allow(clippy::useless_transmute)]
@@ -60,7 +50,7 @@ pub(in super::super) fn wait(
 ) -> WaitResult<ExitStatus> {
     // SAFETY: The process is removed by [_guard] before this function returns.
     let process = Arc::new(Mutex::new(Some(unsafe {
-        transmute_lifetime_mut(handle.process.0)
+        transmute_lifetime_mut(handle.process)
     })));
     let _guard = run_on_drop(|| {
         let _ = process.lock().unwrap().take();

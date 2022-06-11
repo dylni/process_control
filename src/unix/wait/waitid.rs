@@ -1,6 +1,4 @@
-use std::marker::PhantomData;
 use std::mem::MaybeUninit;
-use std::process::Child;
 use std::time::Duration;
 
 use libc::P_PID;
@@ -15,15 +13,6 @@ use super::super::ExitStatus;
 use super::super::Handle;
 
 use super::run_with_time_limit;
-
-#[derive(Debug)]
-pub(in super::super) struct Process<'a>(PhantomData<&'a ()>);
-
-impl<'a> Process<'a> {
-    pub(in super::super) fn new(_: &'a mut Child) -> Self {
-        Self(PhantomData)
-    }
-}
 
 pub(in super::super) fn wait(
     handle: &mut Handle<'_>,
