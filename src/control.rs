@@ -25,6 +25,15 @@ macro_rules! r#impl {
         pub struct $struct$(<$lifetime>)? {
             handle: imp::SharedHandle,
             process: $process_type,
+            #[cfg(any(
+                target_os = "android",
+                all(
+                    target_os = "linux",
+                    any(target_env = "gnu", target_env = "musl"),
+                ),
+                windows,
+            ))]
+            memory_limit: Option<usize>,
             strict_errors: bool,
             terminate_for_timeout: bool,
         }
@@ -35,18 +44,37 @@ macro_rules! r#impl {
                 Self {
                     handle: unsafe { imp::SharedHandle::new(&process) },
                     process,
+                    #[cfg(any(
+                        target_os = "android",
+                        all(
+                            target_os = "linux",
+                            any(target_env = "gnu", target_env = "musl"),
+                        ),
+                        windows,
+                    ))]
+                    memory_limit: None,
                     strict_errors: false,
                     terminate_for_timeout: false,
                 }
             }
 
             fn run_wait(&mut self) -> WaitResult<ExitStatus> {
-                // Check if the exit status was already captured.
                 let result = self.process.try_wait();
                 if let Ok(Some(exit_status)) = result {
                     return Ok(Some(exit_status.into()));
                 }
 
+                #[cfg(any(
+                    target_os = "android",
+                    all(
+                        target_os = "linux",
+                        any(target_env = "gnu", target_env = "musl"),
+                    ),
+                    windows,
+                ))]
+                if let Some(memory_limit) = self.memory_limit {
+                    self.handle.set_memory_limit(memory_limit)?;
+                }
                 self.handle.wait().map(|x| x.map(ExitStatus))
             }
         }
@@ -57,7 +85,7 @@ macro_rules! r#impl {
             if_memory_limit! {
                 #[inline]
                 fn memory_limit(mut self, limit: usize) -> Self {
-                    self.handle.memory_limit = Some(limit);
+                    self.memory_limit = Some(limit);
                     self
                 }
             }

@@ -1,5 +1,4 @@
 use std::fmt;
-use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::os::windows::process::ExitStatusExt;
@@ -27,7 +26,7 @@ impl ExitStatus {
 
 impl Display for ExitStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(&process::ExitStatus::from_raw(self.0), f)
+        process::ExitStatus::from_raw(self.0).fmt(f)
     }
 }
 

@@ -195,7 +195,6 @@ impl Iterator for TimeLimits<'_> {
 #[derive(Debug)]
 pub(super) struct SharedHandle {
     handle: RawHandle,
-    pub(super) memory_limit: Option<usize>,
     pub(super) time_limit: Option<Duration>,
     job_handle: JobHandle,
 }
@@ -204,20 +203,13 @@ impl SharedHandle {
     pub(super) unsafe fn new(process: &Child) -> Self {
         Self {
             handle: RawHandle::new(process),
-            memory_limit: None,
             time_limit: None,
             job_handle: JobHandle(None),
         }
     }
 
-    fn set_memory_limit(&mut self) -> io::Result<()> {
+    pub(super) fn set_memory_limit(&mut self, limit: usize) -> io::Result<()> {
         self.job_handle.close()?;
-
-        let memory_limit = if let Some(memory_limit) = self.memory_limit {
-            memory_limit
-        } else {
-            return Ok(());
-        };
 
         let job_handle = self.job_handle.init()?;
         let job_information = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
@@ -241,7 +233,7 @@ impl SharedHandle {
                 OtherTransferCount: 0,
             },
             ProcessMemoryLimit: 0,
-            JobMemoryLimit: memory_limit,
+            JobMemoryLimit: limit,
             PeakProcessMemoryUsed: 0,
             PeakJobMemoryUsed: 0,
         };
@@ -280,27 +272,19 @@ impl SharedHandle {
     pub(super) fn wait(&mut self) -> WaitResult<ExitStatus> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/process.rs#L334-L344
 
-        self.set_memory_limit()?;
-
-        let mut time_limits = self.time_limits();
-        let mut time_limit =
-            time_limits.next().map(NonZeroDword::get).unwrap_or(0);
-        loop {
-            match unsafe { WaitForSingleObject(self.handle.0, time_limit) } {
+        for time_limit in self.time_limits() {
+            match unsafe {
+                WaitForSingleObject(self.handle.0, time_limit.get())
+            } {
                 WAIT_OBJECT_0 => {
-                    break unsafe { self.handle.get_exit_code() }
+                    return unsafe { self.handle.get_exit_code() }
                         .map(|x| Some(ExitStatus::new(x)));
                 }
-                WAIT_TIMEOUT => {
-                    time_limit = if let Some(time_limit) = time_limits.next() {
-                        time_limit.get()
-                    } else {
-                        break Ok(None);
-                    };
-                }
-                _ => break Err(io::Error::last_os_error()),
+                WAIT_TIMEOUT => {}
+                _ => return Err(io::Error::last_os_error()),
             }
         }
+        Ok(None)
     }
 }
 

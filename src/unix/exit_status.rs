@@ -65,12 +65,12 @@ impl ExitStatus {
         self.code() == Some(EXIT_SUCCESS)
     }
 
-    pub(crate) const fn continued(self) -> bool {
-        matches!(self.kind, ExitStatusKind::Continued)
+    pub(crate) fn continued(self) -> bool {
+        self.kind == ExitStatusKind::Continued
     }
 
-    pub(crate) const fn core_dumped(self) -> bool {
-        matches!(self.kind, ExitStatusKind::Dumped)
+    pub(crate) fn core_dumped(self) -> bool {
+        self.kind == ExitStatusKind::Dumped
     }
 
     code_method!(code, ExitStatusKind::Exited);

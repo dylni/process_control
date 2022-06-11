@@ -86,15 +86,13 @@ where
         .map(|_| result_receiver.recv_timeout(time_limit).ok())
 }
 
-const INVALID_PID_ERROR: &str = "process identifier is invalid";
-
 #[derive(Debug)]
 struct RawPid(pid_t);
 
 impl RawPid {
     fn new(process: &Child) -> Self {
         let pid: u32 = process.id();
-        Self(pid.try_into().expect(INVALID_PID_ERROR))
+        Self(pid.try_into().expect("process identifier is invalid"))
     }
 
     const fn as_id(&self) -> id_t {
@@ -108,14 +106,6 @@ impl RawPid {
 #[derive(Debug)]
 pub(super) struct SharedHandle {
     pid: RawPid,
-    #[cfg(any(
-        target_os = "android",
-        all(
-            target_os = "linux",
-            any(target_env = "gnu", target_env = "musl"),
-        ),
-    ))]
-    pub(super) memory_limit: Option<usize>,
     pub(super) time_limit: Option<Duration>,
 }
 
@@ -123,14 +113,6 @@ impl SharedHandle {
     pub(super) unsafe fn new(process: &Child) -> Self {
         Self {
             pid: RawPid::new(process),
-            #[cfg(any(
-                target_os = "android",
-                all(
-                    target_os = "linux",
-                    any(target_env = "gnu", target_env = "musl"),
-                ),
-            ))]
-            memory_limit: None,
             time_limit: None,
         }
     }
@@ -171,23 +153,17 @@ impl SharedHandle {
                 )
             })
         }
+
+        pub(super) fn set_memory_limit(
+            &mut self,
+            limit: usize,
+        ) -> io::Result<()> {
+            unsafe { self.set_limit(RLIMIT_AS, limit) }
+        }
     }
 
     pub(super) fn wait(&mut self) -> WaitResult<ExitStatus> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/unix/process/process_unix.rs#L432-L441
-
-        #[cfg(any(
-            target_os = "android",
-            all(
-                target_os = "linux",
-                any(target_env = "gnu", target_env = "musl"),
-            ),
-        ))]
-        if let Some(memory_limit) = self.memory_limit {
-            unsafe {
-                self.set_limit(RLIMIT_AS, memory_limit)?;
-            }
-        }
 
         let pid = self.pid.as_id();
         run_with_time_limit(
