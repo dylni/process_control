@@ -26,6 +26,7 @@ enum ExitStatusKind {
 }
 
 impl ExitStatusKind {
+    #[cfg_attr(feature = "__unstable-force-missing-waitid", allow(dead_code))]
     const fn new(raw: c_int) -> Self {
         match raw {
             CLD_CONTINUED => Self::Continued,
@@ -54,6 +55,7 @@ pub(crate) struct ExitStatus {
 }
 
 impl ExitStatus {
+    #[cfg_attr(feature = "__unstable-force-missing-waitid", allow(dead_code))]
     pub(super) unsafe fn new(process_info: siginfo_t) -> Self {
         Self {
             value: unsafe { process_info.si_status() },

@@ -8,6 +8,9 @@ on:
   schedule:
   - cron: 0 0 * * FRI
 
+env:
+  __UNSTABLE_PROCESS_CONTROL_ALLOW_SIGNAL_HOOK_FEATURE: true
+
 jobs:
   build:
     runs-on: ${{ matrix.platform }}

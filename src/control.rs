@@ -23,7 +23,6 @@ macro_rules! r#impl {
     ) => {
         #[derive(Debug)]
         pub struct $struct$(<$lifetime>)? {
-            handle: imp::SharedHandle,
             process: $process_type,
             #[cfg(any(
                 target_os = "android",
@@ -34,15 +33,14 @@ macro_rules! r#impl {
                 windows,
             ))]
             memory_limit: Option<usize>,
+            time_limit: Option<Duration>,
             strict_errors: bool,
             terminate_for_timeout: bool,
         }
 
         impl$(<$lifetime>)? $struct$(<$lifetime>)? {
             pub(super) fn new(process: $process_type) -> Self {
-                // SAFETY: The process is stored in this struct.
                 Self {
-                    handle: unsafe { imp::SharedHandle::new(&process) },
                     process,
                     #[cfg(any(
                         target_os = "android",
@@ -53,6 +51,7 @@ macro_rules! r#impl {
                         windows,
                     ))]
                     memory_limit: None,
+                    time_limit: None,
                     strict_errors: false,
                     terminate_for_timeout: false,
                 }
@@ -64,6 +63,7 @@ macro_rules! r#impl {
                     return Ok(Some(exit_status.into()));
                 }
 
+                let mut handle = imp::Handle::new(&mut self.process);
                 #[cfg(any(
                     target_os = "android",
                     all(
@@ -73,9 +73,9 @@ macro_rules! r#impl {
                     windows,
                 ))]
                 if let Some(memory_limit) = self.memory_limit {
-                    self.handle.set_memory_limit(memory_limit)?;
+                    handle.set_memory_limit(memory_limit)?;
                 }
-                self.handle.wait().map(|x| x.map(ExitStatus))
+                handle.wait(self.time_limit).map(|x| x.map(ExitStatus))
             }
         }
 
@@ -92,7 +92,7 @@ macro_rules! r#impl {
 
             #[inline]
             fn time_limit(mut self, limit: Duration) -> Self {
-                self.handle.time_limit = Some(limit);
+                self.time_limit = Some(limit);
                 self
             }
 

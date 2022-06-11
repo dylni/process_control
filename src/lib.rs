@@ -114,6 +114,15 @@ mod control;
 #[cfg_attr(windows, path = "windows/mod.rs")]
 mod imp;
 
+#[cfg(all(
+    feature = "signal-hook",
+    not(feature = "__unstable-force-missing-waitid"),
+))]
+const _: &str = env! {
+    "__UNSTABLE_PROCESS_CONTROL_ALLOW_SIGNAL_HOOK_FEATURE",
+    "The 'signal-hook' feature is private and will be removed.",
+};
+
 type WaitResult<T> = io::Result<Option<T>>;
 
 /// A wrapper that stores enough information to terminate a process.

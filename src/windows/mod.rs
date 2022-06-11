@@ -6,6 +6,7 @@ use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::io;
 use std::iter::FusedIterator;
+use std::marker::PhantomData;
 use std::mem;
 use std::num::NonZeroU32;
 use std::os::windows::io::AsRawHandle;
@@ -156,18 +157,27 @@ impl Drop for JobHandle {
     }
 }
 
-struct TimeLimits<'a> {
-    handle: &'a SharedHandle,
+struct TimeLimits {
+    time_limit: Option<Duration>,
     start: Instant,
 }
 
-impl FusedIterator for TimeLimits<'_> {}
+impl TimeLimits {
+    fn new(time_limit: Option<Duration>) -> Self {
+        Self {
+            time_limit,
+            start: Instant::now(),
+        }
+    }
+}
 
-impl Iterator for TimeLimits<'_> {
+impl FusedIterator for TimeLimits {}
+
+impl Iterator for TimeLimits {
     type Item = NonZeroDword;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let time_limit = if let Some(time_limit) = self.handle.time_limit {
+        let time_limit = if let Some(time_limit) = self.time_limit {
             time_limit
         } else {
             const NON_ZERO_INFINITE: NonZeroDword =
@@ -193,18 +203,18 @@ impl Iterator for TimeLimits<'_> {
 }
 
 #[derive(Debug)]
-pub(super) struct SharedHandle {
+pub(super) struct Handle<'a> {
     handle: RawHandle,
-    pub(super) time_limit: Option<Duration>,
     job_handle: JobHandle,
+    _marker: PhantomData<&'a ()>,
 }
 
-impl SharedHandle {
-    pub(super) unsafe fn new(process: &Child) -> Self {
+impl<'a> Handle<'a> {
+    pub(super) fn new(process: &'a mut Child) -> Self {
         Self {
             handle: RawHandle::new(process),
-            time_limit: None,
             job_handle: JobHandle(None),
+            _marker: PhantomData,
         }
     }
 
@@ -262,17 +272,13 @@ impl SharedHandle {
         })
     }
 
-    fn time_limits(&self) -> TimeLimits<'_> {
-        TimeLimits {
-            handle: self,
-            start: Instant::now(),
-        }
-    }
-
-    pub(super) fn wait(&mut self) -> WaitResult<ExitStatus> {
+    pub(super) fn wait(
+        &mut self,
+        time_limit: Option<Duration>,
+    ) -> WaitResult<ExitStatus> {
         // https://github.com/rust-lang/rust/blob/49c68bd53f90e375bfb3cbba8c1c67a9e0adb9c0/src/libstd/sys/windows/process.rs#L334-L344
 
-        for time_limit in self.time_limits() {
+        for time_limit in TimeLimits::new(time_limit) {
             match unsafe {
                 WaitForSingleObject(self.handle.0, time_limit.get())
             } {
