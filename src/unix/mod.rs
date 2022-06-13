@@ -108,7 +108,7 @@ impl<'a> Handle<'a> {
     }
 
     if_memory_limit! {
-        unsafe fn set_limit(
+        fn set_limit(
             &mut self,
             resource: LimitResource,
             limit: usize,
@@ -148,7 +148,7 @@ impl<'a> Handle<'a> {
             &mut self,
             limit: usize,
         ) -> io::Result<()> {
-            unsafe { self.set_limit(RLIMIT_AS, limit) }
+            self.set_limit(RLIMIT_AS, limit)
         }
     }
 

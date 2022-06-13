@@ -1,5 +1,5 @@
-//! This crate allows running a process with resource limits, such as a time,
-//! and the option to terminate it automatically afterward. The latter is
+//! This crate allows running a process with resource limits, such as a running
+//! time, and the option to terminate it automatically afterward. The latter is
 //! surprisingly difficult to achieve on Unix, since process identifiers can be
 //! arbitrarily reassigned when no longer used. Thus, it would be extremely
 //! easy to inadvertently terminate an unexpected process. This crate protects
@@ -224,7 +224,7 @@ macro_rules! unix_method {
 [method]: ::std::os::unix::process::ExitStatusExt::",
             stringify!($method),
         )]
-        #[cfg(any(unix, doc))]
+        #[cfg(any(doc, unix))]
         #[cfg_attr(process_control_docs_rs, doc(cfg(unix)))]
         #[inline]
         #[must_use]

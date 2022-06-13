@@ -56,12 +56,12 @@ pub(in super::super) fn wait(
         let _ = process.lock().unwrap().take();
     });
 
-    let thread_process = Arc::clone(&process);
+    let process = Arc::clone(&process);
     run_with_time_limit(
         move || {
             let mut signals = Signals::new([SIGCHLD])?;
             loop {
-                if let Some(process) = &mut *thread_process.lock().unwrap() {
+                if let Some(process) = &mut *process.lock().unwrap() {
                     let result = check_result!(process.try_wait());
                     if let Some(result) = result {
                         break Ok(result.into());
