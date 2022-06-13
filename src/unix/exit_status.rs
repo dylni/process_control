@@ -24,7 +24,7 @@ enum ExitStatusKind {
     Exited,
     Killed,
     Stopped,
-    #[cfg(process_control_waitid)]
+    #[cfg(process_control_unix_waitid)]
     Trapped,
     Uncategorized,
 }
@@ -98,7 +98,7 @@ impl Display for ExitStatus {
             ExitStatusKind::Stopped => {
                 write!(f, "stopped (not terminated) by signal: {}", self.value)
             }
-            #[cfg(process_control_waitid)]
+            #[cfg(process_control_unix_waitid)]
             ExitStatusKind::Trapped => write!(f, "trapped"),
             ExitStatusKind::Uncategorized => {
                 write!(f, "uncategorized wait status: {}", self.value)

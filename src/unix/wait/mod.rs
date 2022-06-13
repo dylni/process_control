@@ -20,8 +20,8 @@ macro_rules! check_result {
     }};
 }
 
-#[cfg_attr(process_control_waitid, path = "waitid.rs")]
-#[cfg_attr(not(process_control_waitid), path = "common.rs")]
+#[cfg_attr(process_control_unix_waitid, path = "waitid.rs")]
+#[cfg_attr(not(process_control_unix_waitid), path = "common.rs")]
 mod imp;
 pub(super) use imp::wait;
 

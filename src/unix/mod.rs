@@ -16,7 +16,7 @@ use super::WaitResult;
 macro_rules! if_waitid {
     ( $($item:item)+ ) => {
         $(
-            #[cfg(process_control_waitid)]
+            #[cfg(process_control_unix_waitid)]
             $item
         )+
     };
@@ -86,9 +86,9 @@ impl RawPid {
 
 #[derive(Debug)]
 pub(super) struct Handle<'a> {
-    #[cfg(not(process_control_waitid))]
+    #[cfg(not(process_control_unix_waitid))]
     process: &'a mut Child,
-    #[cfg(any(process_control_memory_limit, process_control_waitid))]
+    #[cfg(any(process_control_memory_limit, process_control_unix_waitid))]
     pid: RawPid,
     _marker: PhantomData<&'a ()>,
 }
@@ -96,9 +96,12 @@ pub(super) struct Handle<'a> {
 impl<'a> Handle<'a> {
     pub(super) fn new(process: &'a mut Child) -> Self {
         Self {
-            #[cfg(any(process_control_memory_limit, process_control_waitid))]
+            #[cfg(any(
+                process_control_memory_limit,
+                process_control_unix_waitid,
+            ))]
             pid: RawPid::new(process),
-            #[cfg(not(process_control_waitid))]
+            #[cfg(not(process_control_unix_waitid))]
             process,
             _marker: PhantomData,
         }

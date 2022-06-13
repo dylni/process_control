@@ -140,9 +140,9 @@ r#impl!(
     )),
 );
 r#impl!(
-    process_control_waitid,
+    process_control_unix_waitid,
     cfg!(not(any(
-        feature = "__unstable-force-missing-waitid",
+        feature = "__unstable-disable-unix-waitid",
         target_os = "espidf",
         target_os = "horizon",
         target_os = "openbsd",
