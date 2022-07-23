@@ -18,7 +18,7 @@ fn create_memory_limit_command(bytes: usize) -> Command {
     let mut command = Command::new("perl");
     let _ = command
         .arg("-e")
-        .arg("my $bytes = 'a' x $ARGV[0]; print $bytes; sleep $ARGV[1]")
+        .arg("sleep $ARGV[1]; my $bytes = 'a' x $ARGV[0]; print $bytes")
         .arg("--")
         .arg(bytes.to_string())
         .arg(SHORT_TIME_LIMIT.as_secs().to_string())
@@ -58,7 +58,7 @@ macro_rules! memory_limit_0_result {
 #[cfg(not(windows))]
 macro_rules! memory_limit_0_result {
     () => {
-        Some(127) | None
+        _
     };
 }
 
