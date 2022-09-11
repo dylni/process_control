@@ -95,6 +95,7 @@ use std::fmt::Formatter;
 use std::io;
 use std::process;
 use std::process::Child;
+use std::str;
 use std::time::Duration;
 
 mod control;
@@ -217,7 +218,7 @@ impl From<process::ExitStatus> for ExitStatus {
 
 /// Equivalent to [`process::Output`] but holds an instance of [`ExitStatus`]
 /// from this crate.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Output {
     /// Equivalent to [`process::Output::status`].
     pub status: ExitStatus,
@@ -240,6 +241,50 @@ impl AsRef<ExitStatus> for Output {
     #[inline]
     fn as_ref(&self) -> &ExitStatus {
         &self.status
+    }
+}
+
+struct DebugBuffer<'a>(&'a [u8]);
+
+impl Debug for DebugBuffer<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("\"")?;
+
+        let mut string = self.0;
+        while !string.is_empty() {
+            let mut invalid = &b""[..];
+            let valid = str::from_utf8(string).unwrap_or_else(|error| {
+                let (valid, string) = string.split_at(error.valid_up_to());
+
+                let invalid_length =
+                    error.error_len().unwrap_or_else(|| string.len());
+                invalid = &string[..invalid_length];
+
+                // SAFETY: This slice was validated to be UTF-8.
+                unsafe { str::from_utf8_unchecked(valid) }
+            });
+
+            Display::fmt(&valid.escape_debug(), f)?;
+            string = &string[valid.len()..];
+
+            for byte in invalid {
+                write!(f, "\\x{:02X}", byte)?;
+            }
+            string = &string[invalid.len()..];
+        }
+
+        f.write_str("\"")
+    }
+}
+
+impl Debug for Output {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Output")
+            .field("status", &self.status)
+            .field("stdout", &DebugBuffer(&self.stdout))
+            .field("stderr", &DebugBuffer(&self.stderr))
+            .finish()
     }
 }
 
