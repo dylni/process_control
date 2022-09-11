@@ -1,7 +1,6 @@
 use std::convert::TryInto;
 use std::io;
 use std::iter::FusedIterator;
-use std::marker::PhantomData;
 use std::mem;
 use std::num::NonZeroU32;
 use std::os::windows::io::AsRawHandle;
@@ -11,11 +10,8 @@ use std::time::Duration;
 use std::time::Instant;
 
 use windows_sys::Win32::Foundation::CloseHandle;
-use windows_sys::Win32::Foundation::DuplicateHandle;
 use windows_sys::Win32::Foundation::BOOL;
-use windows_sys::Win32::Foundation::DUPLICATE_SAME_ACCESS;
 use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
-use windows_sys::Win32::Foundation::ERROR_INVALID_HANDLE;
 use windows_sys::Win32::Foundation::ERROR_INVALID_PARAMETER;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::STILL_ACTIVE;
@@ -27,9 +23,7 @@ use windows_sys::Win32::System::JobObjects::SetInformationJobObject;
 use windows_sys::Win32::System::JobObjects::JOBOBJECT_BASIC_LIMIT_INFORMATION;
 use windows_sys::Win32::System::JobObjects::JOBOBJECT_EXTENDED_LIMIT_INFORMATION;
 use windows_sys::Win32::System::JobObjects::JOB_OBJECT_LIMIT_JOB_MEMORY;
-use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetExitCodeProcess;
-use windows_sys::Win32::System::Threading::TerminateProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 use windows_sys::Win32::System::Threading::IO_COUNTERS;
 use windows_sys::Win32::System::Threading::WAIT_OBJECT_0;
@@ -76,34 +70,6 @@ struct RawHandle(HANDLE);
 impl RawHandle {
     fn new(process: &Child) -> Self {
         Self(process.as_raw_handle() as _)
-    }
-
-    unsafe fn get_exit_code(&self) -> io::Result<u32> {
-        let mut exit_code = 0;
-        check_syscall(unsafe { GetExitCodeProcess(self.0, &mut exit_code) })?;
-        Ok(exit_code)
-    }
-
-    unsafe fn terminate(&self) -> io::Result<()> {
-        check_syscall(unsafe { TerminateProcess(self.0, 1) })
-    }
-
-    unsafe fn is_not_running_error(&self, error: &io::Error) -> bool {
-        raw_os_error(error) == Some(ERROR_ACCESS_DENIED)
-            && matches!(
-                unsafe { self.get_exit_code() },
-                Ok(x) if x.try_into() != Ok(STILL_ACTIVE),
-            )
-    }
-
-    unsafe fn terminate_if_running(&self) -> io::Result<()> {
-        unsafe { self.terminate() }.or_else(|error| {
-            if unsafe { self.is_not_running_error(&error) } {
-                Ok(())
-            } else {
-                Err(error)
-            }
-        })
     }
 }
 
@@ -188,18 +154,26 @@ impl Iterator for TimeLimits {
 
 #[derive(Debug)]
 pub(super) struct Handle<'a> {
+    process: &'a mut Child,
     handle: RawHandle,
     job_handle: JobHandle,
-    _marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Handle<'a> {
     pub(super) fn new(process: &'a mut Child) -> Self {
         Self {
             handle: RawHandle::new(process),
+            process,
             job_handle: JobHandle(None),
-            _marker: PhantomData,
         }
+    }
+
+    fn get_exit_code(&self) -> io::Result<u32> {
+        let mut exit_code = 0;
+        check_syscall(unsafe {
+            GetExitCodeProcess(self.handle.0, &mut exit_code)
+        })?;
+        Ok(exit_code)
     }
 
     pub(super) fn set_memory_limit(&mut self, limit: usize) -> io::Result<()> {
@@ -245,7 +219,7 @@ impl<'a> Handle<'a> {
         if let Err(error) = &result {
             // This error will occur when the job has a low memory limit.
             return if raw_os_error(error) == Some(ERROR_INVALID_PARAMETER) {
-                unsafe { self.handle.terminate() }
+                self.process.kill()
             } else {
                 result
             };
@@ -267,7 +241,8 @@ impl<'a> Handle<'a> {
                 WaitForSingleObject(self.handle.0, time_limit.get())
             } {
                 WAIT_OBJECT_0 => {
-                    return unsafe { self.handle.get_exit_code() }
+                    return self
+                        .get_exit_code()
                         .map(|x| Some(ExitStatus::new(x)));
                 }
                 WAIT_TIMEOUT => {}
@@ -278,52 +253,17 @@ impl<'a> Handle<'a> {
     }
 }
 
-#[derive(Debug)]
-pub(super) struct DuplicatedHandle(RawHandle);
-
-impl DuplicatedHandle {
-    pub(super) fn new(process: &Child) -> io::Result<Self> {
-        let parent_handle = unsafe { GetCurrentProcess() };
-        let mut handle = 0;
-        check_syscall(unsafe {
-            DuplicateHandle(
-                parent_handle,
-                RawHandle::new(process).0,
-                parent_handle,
-                &mut handle,
-                0,
-                TRUE,
-                DUPLICATE_SAME_ACCESS,
-            )
-        })?;
-        Ok(Self(RawHandle(handle)))
-    }
-
-    pub(super) unsafe fn terminate(&self) -> io::Result<()> {
-        unsafe { self.0.terminate() }.map_err(|error| {
-            // This error is usually decoded to [ErrorKind::Uncategorized]:
-            // https://github.com/rust-lang/rust/blob/11381a5a3a84ab1915d8c2a7ce369d4517c662a0/library/std/src/sys/windows/mod.rs#L63-L128
-            if unsafe { self.0.is_not_running_error(&error) }
-                || raw_os_error(&error) == Some(ERROR_INVALID_HANDLE)
-            {
-                io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "The handle is invalid.",
-                )
-            } else {
-                error
-            }
-        })
-    }
-}
-
-impl Drop for DuplicatedHandle {
-    fn drop(&mut self) {
-        #[rustfmt::skip]
-        let _ = unsafe { CloseHandle(self.0.0) };
-    }
-}
-
 pub(super) fn terminate_if_running(process: &mut Child) -> io::Result<()> {
-    unsafe { RawHandle::new(process).terminate_if_running() }
+    process.kill().or_else(|error| {
+        if raw_os_error(&error) == Some(ERROR_ACCESS_DENIED)
+            && matches!(
+                Handle::new(process).get_exit_code(),
+                Ok(x) if x.try_into() != Ok(STILL_ACTIVE),
+            )
+        {
+            Ok(())
+        } else {
+            Err(error)
+        }
+    })
 }

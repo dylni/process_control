@@ -1,15 +1,10 @@
-use std::convert::TryInto;
 use std::io;
 use std::marker::PhantomData;
-use std::os::raw::c_int;
 use std::process::Child;
 use std::time::Duration;
 
 #[cfg(all(target_env = "gnu", target_os = "linux"))]
 use libc::__rlimit_resource_t;
-use libc::pid_t;
-use libc::ESRCH;
-use libc::SIGKILL;
 
 use super::WaitResult;
 
@@ -44,6 +39,25 @@ if_memory_limit! {
     use libc::RLIMIT_AS;
 }
 
+macro_rules! if_raw_pid {
+    ( $($item:item)+ ) => {
+        $(
+            #[cfg(any(
+                process_control_memory_limit,
+                process_control_unix_waitid,
+            ))]
+            $item
+        )+
+    };
+}
+
+if_raw_pid! {
+    use std::convert::TryInto;
+    use std::os::raw::c_int;
+
+    use libc::pid_t;
+}
+
 if_waitid! {
     use std::mem;
 
@@ -66,29 +80,33 @@ type LimitResource = c_int;
 #[cfg(all(target_env = "gnu", target_os = "linux"))]
 type LimitResource = __rlimit_resource_t;
 
-fn check_syscall(result: c_int) -> io::Result<()> {
-    if result >= 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-#[derive(Debug)]
-struct RawPid(pid_t);
-
-impl RawPid {
-    fn new(process: &Child) -> Self {
-        let pid: u32 = process.id();
-        Self(pid.try_into().expect("process identifier is invalid"))
+if_raw_pid! {
+    fn check_syscall(result: c_int) -> io::Result<()> {
+        if result >= 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
+        }
     }
 
-    if_waitid! {
-        const fn as_id(&self) -> id_t {
-            static_assert!(pid_t::MAX == i32::MAX);
-            static_assert!(mem::size_of::<pid_t>() <= mem::size_of::<id_t>());
+    #[derive(Debug)]
+    struct RawPid(pid_t);
 
-            self.0 as _
+    impl RawPid {
+        fn new(process: &Child) -> Self {
+            let pid: u32 = process.id();
+            Self(pid.try_into().expect("process identifier is invalid"))
+        }
+
+        if_waitid! {
+            const fn as_id(&self) -> id_t {
+                static_assert!(pid_t::MAX == i32::MAX);
+                static_assert!(
+                    mem::size_of::<pid_t>() <= mem::size_of::<id_t>(),
+                );
+
+                self.0 as _
+            }
         }
     }
 }
@@ -166,30 +184,6 @@ impl<'a> Handle<'a> {
         time_limit: Option<Duration>,
     ) -> WaitResult<ExitStatus> {
         wait::wait(self, time_limit)
-    }
-}
-
-#[derive(Debug)]
-pub(super) struct DuplicatedHandle(RawPid);
-
-impl DuplicatedHandle {
-    pub(super) fn new(process: &Child) -> io::Result<Self> {
-        Ok(Self(RawPid::new(process)))
-    }
-
-    #[rustfmt::skip]
-    pub(super) unsafe fn terminate(&self) -> io::Result<()> {
-        check_syscall(unsafe { libc::kill(self.0.0, SIGKILL) }).map_err(
-            |error| {
-                // This error is usually decoded to [ErrorKind::Uncategorized]:
-                // https://github.com/rust-lang/rust/blob/11381a5a3a84ab1915d8c2a7ce369d4517c662a0/library/std/src/sys/unix/mod.rs#L138-L185
-                if error.raw_os_error() == Some(ESRCH) {
-                    io::Error::new(io::ErrorKind::NotFound, "No such process")
-                } else {
-                    error
-                }
-            },
-        )
     }
 }
 

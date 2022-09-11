@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-#![allow(unused_macros)]
 #![warn(unsafe_op_in_unsafe_fn)]
 
 use std::process::Command;

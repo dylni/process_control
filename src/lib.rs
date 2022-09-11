@@ -75,7 +75,6 @@
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
 //! [wait-timeout]: https://crates.io/crates/wait-timeout
 
-#![allow(deprecated)]
 // Only require a nightly compiler when building documentation for docs.rs.
 // This is a private option that should not be used.
 // https://github.com/rust-lang/docs.rs/issues/147#issuecomment-389544407
@@ -144,65 +143,6 @@ r#impl!(
 );
 
 type WaitResult<T> = io::Result<Option<T>>;
-
-/// A wrapper that stores enough information to terminate a process.
-///
-/// Instances can only be constructed using [`ChildExt::terminator`].
-#[deprecated = "cannot be used safely and should be unnecessary"]
-#[derive(Debug)]
-pub struct Terminator(imp::DuplicatedHandle);
-
-impl Terminator {
-    /// Terminates a process as immediately as the operating system allows.
-    ///
-    /// Behavior should be equivalent to calling [`Child::kill`] for the same
-    /// process. However, this method does not require a reference of any kind
-    /// to the [`Child`] instance of the process, meaning that it can be called
-    /// even in some unsafe circumstances.
-    ///
-    /// # Safety
-    ///
-    /// If the process is no longer running, a different process may be
-    /// terminated on some operating systems. Reuse of process identifiers
-    /// makes it impossible for this method to determine if the intended
-    /// process still exists.
-    ///
-    /// Thus, this method should not be used in production code, as
-    /// [`Child::kill`] more safely provides the same functionality. It is only
-    /// used for testing in this crate and may be used similarly in others.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use std::io;
-    /// use std::path::Path;
-    /// use std::process::Command;
-    /// use std::thread;
-    ///
-    /// use process_control::ChildExt;
-    ///
-    /// let dir = Path::new("hello");
-    /// let mut process = Command::new("mkdir").arg(dir).spawn()?;
-    /// let terminator = process.terminator()?;
-    ///
-    /// let thread = thread::spawn(move || process.wait());
-    /// if !dir.exists() {
-    ///     // [process.kill] requires a mutable reference.
-    ///     unsafe { terminator.terminate()? }
-    /// }
-    ///
-    /// let exit_status = thread.join().expect("thread panicked")?;
-    /// println!("exited {}", exit_status);
-    /// #
-    /// # Ok::<_, io::Error>(())
-    /// ```
-    #[deprecated = "cannot be used safely and should be unnecessary"]
-    #[inline]
-    pub unsafe fn terminate(&self) -> io::Result<()> {
-        // SAFETY: The safety requirements are documented.
-        unsafe { self.0.terminate() }
-    }
-}
 
 #[rustfmt::skip]
 macro_rules! unix_method {
@@ -406,58 +346,6 @@ pub trait Control: private::Sealed {
     fn wait(self) -> WaitResult<Self::Result>;
 }
 
-/// A temporary wrapper for a process timeout.
-#[deprecated = "use `Control` instead"]
-pub trait Timeout: private::Sealed {
-    /// The type returned by [`wait`].
-    ///
-    /// [`wait`]: Self::wait
-    #[deprecated = "use `Control::Result` instead"]
-    type Result;
-
-    /// Causes [`wait`] to never suppress an error.
-    ///
-    /// Typically, errors terminating the process will be ignored, as they are
-    /// often less important than the result. However, when this method is
-    /// called, those errors will be returned as well.
-    ///
-    /// [`wait`]: Self::wait
-    #[must_use]
-    #[deprecated = "use `Control::strict_errors` instead"]
-    fn strict_errors(self) -> Self;
-
-    /// Causes the process to be terminated if it exceeds the time limit.
-    ///
-    /// Process identifier reuse by the system will be mitigated. There should
-    /// never be a scenario that causes an unintended process to be terminated.
-    #[must_use]
-    #[deprecated = "use `Control::terminate_for_timeout` instead"]
-    fn terminating(self) -> Self;
-
-    /// Runs the process to completion, aborting if it exceeds the time limit.
-    ///
-    /// At least one thread will be created to wait on the process without
-    /// blocking the current thread.
-    ///
-    /// If the time limit is exceeded before the process finishes, `Ok(None)`
-    /// will be returned. However, the process will not be terminated in that
-    /// case unless [`terminating`] is called beforehand. It is recommended to
-    /// always call that method to allow system resources to be freed.
-    ///
-    /// The stdin handle to the process, if it exists, will be closed before
-    /// waiting. Otherwise, the process would assuredly time out when reading
-    /// from that pipe.
-    ///
-    /// This method cannot guarantee that the same [`io::ErrorKind`] variants
-    /// will be returned in the future for the same types of failures. Allowing
-    /// these breakages is required to enable calling [`Child::kill`]
-    /// internally.
-    ///
-    /// [`terminating`]: Self::terminating
-    #[deprecated = "use `Control::wait` instead"]
-    fn wait(self) -> WaitResult<Self::Result>;
-}
-
 /// Extensions to [`Child`] for easily terminating processes.
 ///
 /// For more information, see [the module-level documentation][crate].
@@ -471,36 +359,6 @@ pub trait ChildExt<'a>: private::Sealed {
     ///
     /// [`controlled_with_output`]: Self::controlled_with_output
     type OutputControl: Control<Result = Output> + Debug;
-
-    /// The type returned by [`with_timeout`].
-    ///
-    /// [`with_timeout`]: Self::with_timeout
-    #[deprecated = "use `ExitStatusControl` instead"]
-    type ExitStatusTimeout: 'a + Timeout<Result = ExitStatus>;
-
-    /// The type returned by [`with_output_timeout`].
-    ///
-    /// [`with_output_timeout`]: Self::with_output_timeout
-    #[deprecated = "use `OutputControl` instead"]
-    type OutputTimeout: Timeout<Result = Output>;
-
-    /// Creates an instance of [`Terminator`] for this process.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use std::io;
-    /// use std::process::Command;
-    ///
-    /// use process_control::ChildExt;
-    ///
-    /// let process = Command::new("echo").spawn()?;
-    /// let terminator = process.terminator()?;
-    /// #
-    /// # Ok::<_, io::Error>(())
-    /// ```
-    #[deprecated = "cannot be used safely and should be unnecessary"]
-    fn terminator(&self) -> io::Result<Terminator>;
 
     /// Equivalent to [`Child::kill`] but ignores errors when the process is no
     /// longer running.
@@ -569,85 +427,12 @@ pub trait ChildExt<'a>: private::Sealed {
     /// ```
     #[must_use]
     fn controlled_with_output(self) -> Self::OutputControl;
-
-    /// Creates an instance of [`Timeout`] that yields [`ExitStatus`] for this
-    /// process.
-    ///
-    /// This method parallels [`Child::wait`] when the process must finish
-    /// within a time limit.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use std::io;
-    /// use std::process::Command;
-    /// use std::time::Duration;
-    ///
-    /// use process_control::ChildExt;
-    /// use process_control::Timeout;
-    ///
-    /// let exit_status = Command::new("echo")
-    ///     .spawn()?
-    ///     .with_timeout(Duration::from_secs(1))
-    ///     .terminating()
-    ///     .wait()?
-    ///     .expect("process timed out");
-    /// assert!(exit_status.success());
-    /// #
-    /// # Ok::<_, io::Error>(())
-    /// ```
-    #[deprecated = "use `controlled` and `Control::time_limit` instead"]
-    #[must_use]
-    fn with_timeout(
-        &'a mut self,
-        time_limit: Duration,
-    ) -> Self::ExitStatusTimeout;
-
-    /// Creates an instance of [`Timeout`] that yields [`Output`] for this
-    /// process.
-    ///
-    /// This method parallels [`Child::wait_with_output`] when the process must
-    /// finish within a time limit.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use std::io;
-    /// use std::process::Command;
-    /// use std::time::Duration;
-    ///
-    /// use process_control::ChildExt;
-    /// use process_control::Timeout;
-    ///
-    /// let output = Command::new("echo")
-    ///     .spawn()?
-    ///     .with_output_timeout(Duration::from_secs(1))
-    ///     .terminating()
-    ///     .wait()?
-    ///     .expect("process timed out");
-    /// assert!(output.status.success());
-    /// #
-    /// # Ok::<_, io::Error>(())
-    /// ```
-    #[deprecated = "use `controlled_with_output` and `Control::time_limit` \
-                    instead"]
-    #[must_use]
-    fn with_output_timeout(self, time_limit: Duration) -> Self::OutputTimeout;
 }
 
 impl<'a> ChildExt<'a> for Child {
     type ExitStatusControl = control::ExitStatusControl<'a>;
 
     type OutputControl = control::OutputControl;
-
-    type ExitStatusTimeout = control::ExitStatusTimeout<'a>;
-
-    type OutputTimeout = control::OutputTimeout;
-
-    #[inline]
-    fn terminator(&self) -> io::Result<Terminator> {
-        imp::DuplicatedHandle::new(self).map(Terminator)
-    }
 
     #[inline]
     fn terminate_if_running(&mut self) -> io::Result<()> {
@@ -663,19 +448,6 @@ impl<'a> ChildExt<'a> for Child {
     fn controlled_with_output(self) -> Self::OutputControl {
         Self::OutputControl::new(self)
     }
-
-    #[inline]
-    fn with_timeout(
-        &'a mut self,
-        time_limit: Duration,
-    ) -> Self::ExitStatusTimeout {
-        Self::ExitStatusTimeout::new(self, time_limit)
-    }
-
-    #[inline]
-    fn with_output_timeout(self, time_limit: Duration) -> Self::OutputTimeout {
-        Self::OutputTimeout::new(self, time_limit)
-    }
 }
 
 mod private {
@@ -686,7 +458,5 @@ mod private {
     pub trait Sealed {}
     impl Sealed for Child {}
     impl Sealed for control::ExitStatusControl<'_> {}
-    impl Sealed for control::ExitStatusTimeout<'_> {}
     impl Sealed for control::OutputControl {}
-    impl Sealed for control::OutputTimeout {}
 }

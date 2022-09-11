@@ -10,13 +10,11 @@ use super::imp;
 use super::Control;
 use super::ExitStatus;
 use super::Output;
-use super::Timeout;
 use super::WaitResult;
 
 macro_rules! r#impl {
     (
         $struct:ident $(< $lifetime:lifetime >)? ,
-        $deprecated_struct:ident,
         $process_type:ty ,
         $return_type:ty ,
         $wait_fn:expr $(,)?
@@ -117,51 +115,11 @@ macro_rules! r#impl {
                 result
             }
         }
-
-        #[deprecated = concat!("use `", stringify!($struct), "` instead")]
-        #[derive(Debug)]
-        pub struct $deprecated_struct$(<$lifetime>)?($struct$(<$lifetime>)?);
-
-        impl$(<$lifetime>)? $deprecated_struct$(<$lifetime>)? {
-            #[deprecated = concat!(
-                "use `",
-                stringify!($struct),
-                "::new` and `",
-                stringify!($struct),
-                "::time_limit` instead",
-            )]
-            pub(super) fn new(
-                process: $process_type,
-                time_limit: Duration,
-            ) -> Self {
-                Self($struct::new(process).time_limit(time_limit))
-            }
-        }
-
-        impl$(<$lifetime>)? Timeout for $deprecated_struct$(<$lifetime>)? {
-            type Result = $return_type;
-
-            #[inline]
-            fn strict_errors(self) -> Self {
-                Self(self.0.strict_errors())
-            }
-
-            #[inline]
-            fn terminating(self) -> Self {
-                Self(self.0.terminate_for_timeout())
-            }
-
-            #[inline]
-            fn wait(self) -> WaitResult<Self::Result> {
-                self.0.wait()
-            }
-        }
     };
 }
 
 r#impl!(
     ExitStatusControl<'a>,
-    ExitStatusTimeout,
     &'a mut Child,
     ExitStatus,
     Self::run_wait,
@@ -217,10 +175,4 @@ impl OutputControl {
     }
 }
 
-r#impl!(
-    OutputControl,
-    OutputTimeout,
-    Child,
-    Output,
-    Self::run_wait_with_output,
-);
+r#impl!(OutputControl, Child, Output, Self::run_wait_with_output);
