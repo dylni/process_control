@@ -406,7 +406,6 @@ pub trait ChildExt<'a>: private::Sealed {
     ///
     /// Windows and Unix errors are inconsistent when terminating processes.
     /// This method unifies them by simulating Unix behavior on Windows.
-    #[allow(clippy::missing_errors_doc)]
     fn terminate_if_running(&mut self) -> io::Result<()>;
 
     /// Creates an instance of [`Control`] that yields [`ExitStatus`] for this

@@ -35,7 +35,6 @@ macro_rules! new_cfg {
     }};
 }
 
-#[allow(clippy::nonminimal_bool)]
 fn main() {
     new_cfg!(
         memory_limit,
