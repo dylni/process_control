@@ -31,7 +31,6 @@ macro_rules! assert_matches {
     }};
 }
 
-#[cfg_attr(not(process_control_memory_limit), allow(unused_macro_rules))]
 macro_rules! test {
     ( command: $command:expr , $($token:tt)* ) => {{
         test!(@output $command, controlled, $($token)*);

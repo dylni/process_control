@@ -27,6 +27,15 @@ pub(super) use exit_status::ExitStatus;
 
 mod wait;
 
+macro_rules! if_memory_limit {
+    ( $($item:item)+ ) => {
+        $(
+            #[cfg(process_control_memory_limit)]
+            $item
+        )+
+    };
+}
+
 if_memory_limit! {
     use std::convert::TryFrom;
     use std::ptr;

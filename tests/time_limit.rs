@@ -11,7 +11,7 @@ use common::LONG_TIME_LIMIT;
 use common::SHORT_TIME_LIMIT;
 
 #[test]
-fn test_time_limit() -> io::Result<()> {
+fn test_accept() -> io::Result<()> {
     test!(
         command: common::create_time_limit_command(SHORT_TIME_LIMIT),
         time_limit: LONG_TIME_LIMIT,
@@ -22,7 +22,7 @@ fn test_time_limit() -> io::Result<()> {
 }
 
 #[test]
-fn test_time_limit_expired() -> io::Result<()> {
+fn test_reject() -> io::Result<()> {
     test!(
         command: common::create_time_limit_command(LONG_TIME_LIMIT),
         time_limit: SHORT_TIME_LIMIT,
@@ -33,7 +33,7 @@ fn test_time_limit_expired() -> io::Result<()> {
 }
 
 #[test]
-fn test_terminating_time_limit() -> io::Result<()> {
+fn test_terminating_accept() -> io::Result<()> {
     test!(
         command: common::create_time_limit_command(SHORT_TIME_LIMIT),
         time_limit: LONG_TIME_LIMIT,
@@ -44,7 +44,7 @@ fn test_terminating_time_limit() -> io::Result<()> {
 }
 
 #[test]
-fn test_terminating_time_limit_expired() -> io::Result<()> {
+fn test_terminating_reject() -> io::Result<()> {
     test!(
         command: common::create_time_limit_command(LONG_TIME_LIMIT),
         time_limit: SHORT_TIME_LIMIT,

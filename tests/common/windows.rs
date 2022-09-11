@@ -4,15 +4,13 @@ use std::process::Child;
 
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::DuplicateHandle;
+use windows_sys::Win32::Foundation::BOOL;
 use windows_sys::Win32::Foundation::DUPLICATE_SAME_ACCESS;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::WAIT_TIMEOUT;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 use windows_sys::Win32::System::Threading::WAIT_OBJECT_0;
-
-#[allow(clippy::upper_case_acronyms)]
-type BOOL = i32;
 
 const TRUE: BOOL = 1;
 

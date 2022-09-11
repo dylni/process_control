@@ -12,14 +12,12 @@ use super::super::check_syscall;
 use super::super::ExitStatus;
 use super::super::Handle;
 
-use super::run_with_time_limit;
-
 pub(in super::super) fn wait(
     handle: &mut Handle<'_>,
     time_limit: Option<Duration>,
 ) -> WaitResult<ExitStatus> {
     let pid = handle.pid.as_id();
-    run_with_time_limit(
+    super::run_with_time_limit(
         move || loop {
             let mut process_info = MaybeUninit::uninit();
             check_result!(check_syscall(unsafe {

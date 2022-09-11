@@ -5,14 +5,14 @@ authors = ["dylni"]
 edition = "2021"
 rust-version = "1.58.0"
 description = """
-Methods for ergonomically running processes with timeouts
+Ergonomically run processes with limits
 """
 readme = "README.md"
 repository = "https://github.com/dylni/process_control"
 license = "MIT OR Apache-2.0"
 keywords = ["kill", "process", "terminate", "timeout", "wait"]
 categories = ["concurrency", "os"]
-exclude = [".*", "/rustfmt.toml", "/tests"]
+exclude = [".*", "tests.rs", "/rustfmt.toml", "/src/bin", "/tests"]
 
 [package.metadata.docs.rs]
 rustc-args = ["--cfg", "process_control_docs_rs"]
@@ -26,7 +26,7 @@ crossbeam-channel = { version = "0.5", optional = true }
 libc = "0.2.120"
 
 [target.'cfg(all(unix, any(target_os = "espidf", target_os = "horizon", target_os = "openbsd", target_os = "redox", target_os = "tvos", target_os = "vxworks")))'.dependencies]
-signal-hook = { version = "0.3" }
+signal-hook = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.36", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_WindowsProgramming"] }

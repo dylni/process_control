@@ -61,12 +61,11 @@ macro_rules! r#impl {
         impl$(<$lifetime>)? Control for $struct$(<$lifetime>)? {
             type Result = $return_type;
 
-            if_memory_limit! {
-                #[inline]
-                fn memory_limit(mut self, limit: usize) -> Self {
-                    self.memory_limit = Some(limit);
-                    self
-                }
+            #[cfg(any(doc, process_control_memory_limit))]
+            #[inline]
+            fn memory_limit(mut self, limit: usize) -> Self {
+                self.memory_limit = Some(limit);
+                self
             }
 
             #[inline]
@@ -92,7 +91,7 @@ macro_rules! r#impl {
                 let _ = self.process.stdin.take();
                 let mut result = $wait_fn(&mut self);
 
-                macro_rules! try_run {
+                macro_rules! run_if_ok {
                     ( $get_result_fn:expr ) => {
                         if result.is_ok() {
                             if let Err(error) = $get_result_fn() {
@@ -110,10 +109,10 @@ macro_rules! r#impl {
                         imp::terminate_if_running(&mut self.process)
                             .and_then(|()| self.process.wait());
                     if self.strict_errors {
-                        try_run!(|| next_result);
+                        run_if_ok!(|| next_result);
                     }
                 }
-                try_run!(|| self.process.try_wait());
+                run_if_ok!(|| self.process.try_wait());
 
                 result
             }
@@ -168,46 +167,53 @@ r#impl!(
     Self::run_wait,
 );
 
+struct Reader(Option<JoinHandle<io::Result<Vec<u8>>>>);
+
+impl Reader {
+    fn spawn<R>(source: Option<R>) -> io::Result<Self>
+    where
+        R: 'static + Read + Send,
+    {
+        source
+            .map(|mut source| {
+                thread::Builder::new().spawn(move || {
+                    let mut buffer = Vec::new();
+                    let _ = source.read_to_end(&mut buffer)?;
+                    Ok(buffer)
+                })
+            })
+            .transpose()
+            .map(Self)
+    }
+
+    fn join(self) -> io::Result<Vec<u8>> {
+        self.0
+            .map(|x| x.join().unwrap_or_else(|x| panic::resume_unwind(x)))
+            .transpose()
+            .map(|x| x.unwrap_or_else(Vec::new))
+    }
+}
+
 impl OutputControl {
     fn run_wait_with_output(&mut self) -> WaitResult<Output> {
-        let stdout_reader = spawn_reader(&mut self.process.stdout)?;
-        let stderr_reader = spawn_reader(&mut self.process.stderr)?;
+        macro_rules! reader {
+            ( $stream:ident ) => {
+                Reader::spawn(self.process.$stream.take())
+            };
+        }
 
-        return self
-            .run_wait()?
+        let stdout_reader = reader!(stdout)?;
+        let stderr_reader = reader!(stderr)?;
+
+        self.run_wait()?
             .map(|status| {
                 Ok(Output {
                     status,
-                    stdout: join_reader(stdout_reader)?,
-                    stderr: join_reader(stderr_reader)?,
+                    stdout: stdout_reader.join()?,
+                    stderr: stderr_reader.join()?,
                 })
             })
-            .transpose();
-
-        type Reader = Option<JoinHandle<io::Result<Vec<u8>>>>;
-
-        fn spawn_reader<R>(source: &mut Option<R>) -> io::Result<Reader>
-        where
-            R: 'static + Read + Send,
-        {
-            source
-                .take()
-                .map(|mut source| {
-                    thread::Builder::new().spawn(move || {
-                        let mut buffer = Vec::new();
-                        let _ = source.read_to_end(&mut buffer)?;
-                        Ok(buffer)
-                    })
-                })
-                .transpose()
-        }
-
-        fn join_reader(reader: Reader) -> io::Result<Vec<u8>> {
-            reader
-                .map(|x| x.join().unwrap_or_else(|x| panic::resume_unwind(x)))
-                .transpose()
-                .map(|x| x.unwrap_or_else(Vec::new))
-        }
+            .transpose()
     }
 }
 

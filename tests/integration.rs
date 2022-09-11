@@ -32,6 +32,12 @@ fn test_large_output() -> io::Result<()> {
     const BUFFER_LENGTH: usize = 1024;
     const OUTPUT_LENGTH: usize = BUFFER_COUNT * BUFFER_LENGTH;
 
+    #[track_caller]
+    fn test_output(output: Vec<u8>, byte: u8) {
+        assert_eq!(OUTPUT_LENGTH, output.len());
+        assert!(output.into_iter().all(|x| x == byte));
+    }
+
     let process = Command::new("perl")
         .arg("-e")
         .arg(
@@ -59,13 +65,7 @@ fn test_large_output() -> io::Result<()> {
     test_output(output.stdout, b'a');
     test_output(output.stderr, b'b');
 
-    return Ok(());
-
-    #[track_caller]
-    fn test_output(output: Vec<u8>, byte: u8) {
-        assert_eq!(OUTPUT_LENGTH, output.len());
-        assert!(output.into_iter().all(|x| x == byte));
-    }
+    Ok(())
 }
 
 #[test]

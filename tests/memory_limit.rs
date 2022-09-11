@@ -14,7 +14,7 @@ mod common;
 use common::MEMORY_LIMIT;
 use common::SHORT_TIME_LIMIT;
 
-fn create_memory_limit_command(bytes: usize) -> Command {
+fn create_command(bytes: usize) -> Command {
     let mut command = Command::new("perl");
     let _ = command
         .arg("-e")
@@ -28,9 +28,9 @@ fn create_memory_limit_command(bytes: usize) -> Command {
 }
 
 #[test]
-fn test_memory_limit() -> io::Result<()> {
+fn test_accept() -> io::Result<()> {
     test!(
-        command: create_memory_limit_command(MEMORY_LIMIT),
+        command: create_command(MEMORY_LIMIT),
         memory_limit: 2 * MEMORY_LIMIT,
         terminating: false,
         expected_result: Some(Some(0)),
@@ -39,9 +39,9 @@ fn test_memory_limit() -> io::Result<()> {
 }
 
 #[test]
-fn test_memory_limit_exceeded() -> io::Result<()> {
+fn test_reject() -> io::Result<()> {
     test!(
-        command: create_memory_limit_command(MEMORY_LIMIT),
+        command: create_command(MEMORY_LIMIT),
         memory_limit: MEMORY_LIMIT,
         terminating: false,
         expected_result: Some(Some(1)),
@@ -63,9 +63,9 @@ macro_rules! memory_limit_0_result {
 }
 
 #[test]
-fn test_memory_limit_0() -> io::Result<()> {
+fn test_0() -> io::Result<()> {
     test!(
-        command: create_memory_limit_command(MEMORY_LIMIT),
+        command: create_command(MEMORY_LIMIT),
         memory_limit: 0,
         terminating: false,
         expected_result: Some(memory_limit_0_result!()),
@@ -74,9 +74,9 @@ fn test_memory_limit_0() -> io::Result<()> {
 }
 
 #[test]
-fn test_memory_limit_1() -> io::Result<()> {
+fn test_1() -> io::Result<()> {
     test!(
-        command: create_memory_limit_command(MEMORY_LIMIT),
+        command: create_command(MEMORY_LIMIT),
         memory_limit: 1,
         terminating: false,
         expected_result: Some(memory_limit_0_result!()),

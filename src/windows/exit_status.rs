@@ -4,14 +4,13 @@ use std::fmt::Formatter;
 use std::os::windows::process::ExitStatusExt;
 use std::process;
 
-use super::DWORD;
 use super::EXIT_SUCCESS;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ExitStatus(DWORD);
+pub(crate) struct ExitStatus(u32);
 
 impl ExitStatus {
-    pub(super) const fn new(exit_code: DWORD) -> Self {
+    pub(super) const fn new(exit_code: u32) -> Self {
         Self(exit_code)
     }
 
@@ -19,7 +18,7 @@ impl ExitStatus {
         self.0 == EXIT_SUCCESS
     }
 
-    pub(crate) fn code(self) -> Option<DWORD> {
+    pub(crate) fn code(self) -> Option<u32> {
         Some(self.0)
     }
 }

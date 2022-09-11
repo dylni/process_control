@@ -1,9 +1,4 @@
-use std::any;
-use std::cell::Cell;
 use std::convert::TryInto;
-use std::fmt;
-use std::fmt::Debug;
-use std::fmt::Formatter;
 use std::io;
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
@@ -17,6 +12,7 @@ use std::time::Instant;
 
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::DuplicateHandle;
+use windows_sys::Win32::Foundation::BOOL;
 use windows_sys::Win32::Foundation::DUPLICATE_SAME_ACCESS;
 use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::Foundation::ERROR_INVALID_HANDLE;
@@ -59,17 +55,10 @@ macro_rules! assert_matches {
     }};
 }
 
-// https://github.com/microsoft/windows-rs/issues/881
-#[allow(clippy::upper_case_acronyms)]
-type BOOL = i32;
-#[allow(clippy::upper_case_acronyms)]
-type DWORD = u32;
-type NonZeroDword = NonZeroU32;
-
-const EXIT_SUCCESS: DWORD = 0;
+const EXIT_SUCCESS: u32 = 0;
 const TRUE: BOOL = 1;
 
-fn raw_os_error(error: &io::Error) -> Option<DWORD> {
+fn raw_os_error(error: &io::Error) -> Option<u32> {
     error.raw_os_error().and_then(|x| x.try_into().ok())
 }
 
@@ -89,7 +78,7 @@ impl RawHandle {
         Self(process.as_raw_handle() as _)
     }
 
-    unsafe fn get_exit_code(&self) -> io::Result<DWORD> {
+    unsafe fn get_exit_code(&self) -> io::Result<u32> {
         let mut exit_code = 0;
         check_syscall(unsafe { GetExitCodeProcess(self.0, &mut exit_code) })?;
         Ok(exit_code)
@@ -123,6 +112,7 @@ impl RawHandle {
 unsafe impl Send for RawHandle {}
 unsafe impl Sync for RawHandle {}
 
+#[derive(Debug)]
 struct JobHandle(Option<RawHandle>);
 
 impl JobHandle {
@@ -142,12 +132,6 @@ impl JobHandle {
             check_syscall(unsafe { CloseHandle(handle.0) })?;
         }
         Ok(())
-    }
-}
-
-impl Debug for JobHandle {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        any::type_name::<Cell<Option<RawHandle>>>().fmt(f)
     }
 }
 
@@ -174,14 +158,14 @@ impl TimeLimits {
 impl FusedIterator for TimeLimits {}
 
 impl Iterator for TimeLimits {
-    type Item = NonZeroDword;
+    type Item = NonZeroU32;
 
     fn next(&mut self) -> Option<Self::Item> {
         let time_limit = if let Some(time_limit) = self.time_limit {
             time_limit
         } else {
-            const NON_ZERO_INFINITE: NonZeroDword =
-                if let Some(result) = NonZeroDword::new(INFINITE) {
+            const NON_ZERO_INFINITE: NonZeroU32 =
+                if let Some(result) = NonZeroU32::new(INFINITE) {
                     result
                 } else {
                     unreachable!();
@@ -194,11 +178,11 @@ impl Iterator for TimeLimits {
             .saturating_sub(self.start.elapsed())
             .as_millis()
             .try_into()
-            .unwrap_or(DWORD::MAX);
+            .unwrap_or(u32::MAX);
         if time_limit == INFINITE {
             time_limit -= 1;
         }
-        NonZeroDword::new(time_limit)
+        NonZeroU32::new(time_limit)
     }
 }
 

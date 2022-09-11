@@ -10,13 +10,9 @@ use signal_hook::iterator::Signals;
 
 use crate::WaitResult;
 
-use super::run_with_time_limit;
-
 use super::super::ExitStatus;
 use super::super::Handle;
 
-// https://github.com/rust-lang/rust-clippy/issues/3340
-#[allow(clippy::useless_transmute)]
 unsafe fn transmute_lifetime_mut<'a, T>(value: &mut T) -> &'a mut T
 where
     T: ?Sized,
@@ -28,8 +24,6 @@ fn run_on_drop<F>(drop_fn: F) -> impl Drop
 where
     F: FnOnce(),
 {
-    return Dropper(ManuallyDrop::new(drop_fn));
-
     struct Dropper<F>(ManuallyDrop<F>)
     where
         F: FnOnce();
@@ -42,6 +36,8 @@ where
             (unsafe { ManuallyDrop::take(&mut self.0) })();
         }
     }
+
+    Dropper(ManuallyDrop::new(drop_fn))
 }
 
 pub(in super::super) fn wait(
@@ -57,7 +53,7 @@ pub(in super::super) fn wait(
     });
 
     let process = Arc::clone(&process);
-    run_with_time_limit(
+    super::run_with_time_limit(
         move || {
             let mut signals = Signals::new([SIGCHLD])?;
             loop {

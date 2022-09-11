@@ -89,7 +89,9 @@ impl ExitStatus {
 impl Display for ExitStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.kind {
-            ExitStatusKind::Continued => write!(f, "continued (WIFCONTINUED)"),
+            ExitStatusKind::Continued => {
+                f.write_str("continued (WIFCONTINUED)")
+            }
             ExitStatusKind::Dumped => {
                 write!(f, "signal: {} (core dumped)", self.value)
             }
@@ -99,7 +101,7 @@ impl Display for ExitStatus {
                 write!(f, "stopped (not terminated) by signal: {}", self.value)
             }
             #[cfg(process_control_unix_waitid)]
-            ExitStatusKind::Trapped => write!(f, "trapped"),
+            ExitStatusKind::Trapped => f.write_str("trapped"),
             ExitStatusKind::Uncategorized => {
                 write!(f, "uncategorized wait status: {}", self.value)
             }
