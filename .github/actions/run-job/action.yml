@@ -1,0 +1,34 @@
+name: run-job
+description:
+
+inputs:
+  action:
+    description:
+    required: true
+  target:
+    description:
+    required: false
+  version:
+    description:
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        repository: dylni/build-actions
+    - run: mv '${{ inputs.action }}' ../action
+      shell: bash
+    - uses: ./../action
+      with:
+        target: ${{ inputs.target }}
+        version: ${{ inputs.version }}
+    - run: |
+        perl -pi -e 's/unix_waitid/&_disabled/' build.rs src/lib.rs
+        perl -pi -e 's/(unix), any\(.*?\)/\1/' Cargo.toml
+      shell: bash
+    - uses: ./../action
+      with:
+        target: ${{ inputs.target }}
+        version: ${{ inputs.version }}

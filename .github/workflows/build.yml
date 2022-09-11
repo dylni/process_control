@@ -8,14 +8,13 @@ on:
   schedule:
   - cron: 0 0 * * FRI
 
-env:
-  __UNSTABLE_PROCESS_CONTROL_ALLOW_SIGNAL_HOOK_FEATURE: true
-
 jobs:
   build:
     runs-on: ${{ matrix.platform }}
     steps:
-    - uses: dylni/build-actions/build@master
+    - uses: dylni/process_control/.github/actions/run-job@master
+      with:
+        action: build
     timeout-minutes: 10
     strategy:
       matrix:
@@ -24,8 +23,9 @@ jobs:
     needs: [build]
     runs-on: ubuntu-latest
     steps:
-    - uses: dylni/build-actions/build-other@master
+    - uses: dylni/process_control/.github/actions/run-job@master
       with:
+        action: build-other
         target: ${{ matrix.target }}
         version: ${{ matrix.version }}
     timeout-minutes: 10
@@ -37,8 +37,9 @@ jobs:
     needs: [build]
     runs-on: ${{ matrix.platform }}
     steps:
-    - uses: dylni/build-actions/test@master
+    - uses: dylni/process_control/.github/actions/run-job@master
       with:
+        action: test
         version: ${{ matrix.version }}
     timeout-minutes: 10
     strategy:

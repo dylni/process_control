@@ -26,6 +26,11 @@
 //!   Changes the implementation to use crate [crossbeam-channel] for better
 //!   performance.
 //!
+//! - **parking\_lot** -
+//!   Changes the implementation to use crate [parking\_lot] on targets missing
+//!   some syscalls. This feature will reduce the likelihood of resource
+//!   starvation for those targets.
+//!
 //! # Implementation
 //!
 //! All traits are [sealed], meaning that they can only be implemented by this
@@ -71,6 +76,7 @@
 //! ```
 //!
 //! [crossbeam-channel]: https://crates.io/crates/crossbeam-channel
+//! [parking\_lot]: https://crates.io/crates/parking_lot
 //! [`Receiver::recv_timeout`]: ::std::sync::mpsc::Receiver::recv_timeout
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
 //! [wait-timeout]: https://crates.io/crates/wait-timeout
@@ -96,15 +102,6 @@ mod control;
 #[cfg_attr(unix, path = "unix/mod.rs")]
 #[cfg_attr(windows, path = "windows/mod.rs")]
 mod imp;
-
-#[cfg(all(
-    feature = "signal-hook",
-    not(feature = "__unstable-force-missing-waitid"),
-))]
-const _: &str = env! {
-    "__UNSTABLE_PROCESS_CONTROL_ALLOW_SIGNAL_HOOK_FEATURE",
-    "The 'signal-hook' feature is private and will be removed.",
-};
 
 macro_rules! r#impl {
     ( $short_name:ident , $long_cfg:expr , ) => {
@@ -132,7 +129,6 @@ r#impl!(
 r#impl!(
     process_control_unix_waitid,
     cfg!(not(any(
-        feature = "__unstable-disable-unix-waitid",
         target_os = "espidf",
         target_os = "horizon",
         target_os = "openbsd",

@@ -45,7 +45,6 @@ fn main() {
     );
     new_cfg!(
         unix_waitid,
-        !cfg_var!(FEATURE, __unstable_disable_unix_waitid)
-            && !targets!(OS => espidf, horizon, openbsd, redox, tvos, vxworks),
+        !targets!(OS => espidf, horizon, openbsd, redox, tvos, vxworks),
     );
 }
