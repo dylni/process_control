@@ -15,6 +15,7 @@ use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::Foundation::ERROR_INVALID_PARAMETER;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::STILL_ACTIVE;
+use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
 use windows_sys::Win32::Foundation::WAIT_TIMEOUT;
 use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
 use windows_sys::Win32::System::JobObjects::CreateJobObjectW;
@@ -26,7 +27,6 @@ use windows_sys::Win32::System::JobObjects::JOB_OBJECT_LIMIT_JOB_MEMORY;
 use windows_sys::Win32::System::Threading::GetExitCodeProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 use windows_sys::Win32::System::Threading::IO_COUNTERS;
-use windows_sys::Win32::System::Threading::WAIT_OBJECT_0;
 use windows_sys::Win32::System::WindowsProgramming::INFINITE;
 
 use super::WaitResult;
