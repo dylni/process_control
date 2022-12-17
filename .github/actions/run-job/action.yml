@@ -25,8 +25,9 @@ runs:
         target: ${{ inputs.target }}
         version: ${{ inputs.version }}
     - run: |
-        perl -pi -e 's/unix_waitid/&_disabled/' build.rs src/lib.rs
+        perl -pi -e 's/unix_waitid/$&_disabled/' build.rs src/lib.rs
         perl -pi -e 's/(unix), any\(.*?\)/\1/' Cargo.toml
+        perl -0pi -e 's/(\n *- )uses: dylni\/build-actions\/setup@.*?\1/\1/s' ../action/action.yml
       shell: bash
     - uses: ./../action
       with:
