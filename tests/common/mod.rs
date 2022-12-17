@@ -6,14 +6,14 @@ use std::time::Duration;
 
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
-pub(crate) mod imp;
+pub(super) mod imp;
 
-pub(crate) const SHORT_TIME_LIMIT: Duration = Duration::from_secs(2);
+pub(super) const SHORT_TIME_LIMIT: Duration = Duration::from_secs(2);
 
-pub(crate) const LONG_TIME_LIMIT: Duration = Duration::from_secs(5);
+pub(super) const LONG_TIME_LIMIT: Duration = Duration::from_secs(5);
 
 #[cfg(process_control_memory_limit)]
-pub(crate) const MEMORY_LIMIT: usize = 104_857_600;
+pub(super) const MEMORY_LIMIT: usize = 104_857_600;
 
 macro_rules! assert_matches {
     ( $result:expr , $expected_result:pat $(,)? ) => {{
@@ -113,7 +113,7 @@ macro_rules! test {
     }};
 }
 
-pub(crate) fn create_time_limit_command(seconds: Duration) -> Command {
+pub(super) fn create_time_limit_command(seconds: Duration) -> Command {
     let whole_seconds = seconds.as_secs();
     assert_eq!(seconds, Duration::from_secs(whole_seconds));
 

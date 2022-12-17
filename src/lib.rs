@@ -57,8 +57,9 @@
 //! use process_control::ChildExt;
 //! use process_control::Control;
 //!
+//! let message = "hello world";
 //! let process = Command::new("echo")
-//!     .arg("hello")
+//!     .arg(message)
 //!     .stdout(Stdio::piped())
 //!     .spawn()?;
 //!
@@ -70,7 +71,8 @@
 //!     .ok_or_else(|| {
 //!         io::Error::new(io::ErrorKind::TimedOut, "Process timed out")
 //!     })?;
-//! assert_eq!(b"hello", &output.stdout[..5]);
+//! assert!(output.status.success());
+//! assert_eq!(message.as_bytes(), &output.stdout[..message.len()]);
 //! #
 //! # Ok::<_, io::Error>(())
 //! ```
@@ -389,7 +391,9 @@ pub trait Control: private::Sealed {
 
 /// Extensions to [`Child`] for easily terminating processes.
 ///
-/// For more information, see [the module-level documentation][crate].
+/// For more information, see [the module-level documentation][module].
+///
+/// [module]: self
 pub trait ChildExt<'a>: private::Sealed {
     /// The type returned by [`controlled`].
     ///

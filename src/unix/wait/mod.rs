@@ -25,7 +25,7 @@ macro_rules! check_result {
 mod imp;
 pub(super) use imp::wait;
 
-pub(super) fn run_with_time_limit<F, R>(
+fn run_with_time_limit<F, R>(
     run_fn: F,
     time_limit: Option<Duration>,
 ) -> WaitResult<R>
