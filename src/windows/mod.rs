@@ -64,6 +64,10 @@ fn check_syscall(result: BOOL) -> io::Result<()> {
     }
 }
 
+const fn size_of_val_raw<T>(_: *const T) -> usize {
+    mem::size_of::<T>()
+}
+
 #[derive(Debug)]
 struct RawHandle(HANDLE);
 
@@ -180,38 +184,38 @@ impl<'a> Handle<'a> {
         self.job_handle.close()?;
 
         let job_handle = self.job_handle.init()?;
-        let job_information = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
-            BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION {
-                PerProcessUserTimeLimit: 0,
-                PerJobUserTimeLimit: 0,
-                LimitFlags: JOB_OBJECT_LIMIT_JOB_MEMORY,
-                MinimumWorkingSetSize: 0,
-                MaximumWorkingSetSize: 0,
-                ActiveProcessLimit: 0,
-                Affinity: 0,
-                PriorityClass: 0,
-                SchedulingClass: 0,
-            },
-            IoInfo: IO_COUNTERS {
-                ReadOperationCount: 0,
-                WriteOperationCount: 0,
-                OtherOperationCount: 0,
-                ReadTransferCount: 0,
-                WriteTransferCount: 0,
-                OtherTransferCount: 0,
-            },
-            ProcessMemoryLimit: 0,
-            JobMemoryLimit: limit,
-            PeakProcessMemoryUsed: 0,
-            PeakJobMemoryUsed: 0,
-        };
-        let job_information_ptr: *const _ = &job_information;
+        let job_information: *const _ =
+            &JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+                BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION {
+                    PerProcessUserTimeLimit: 0,
+                    PerJobUserTimeLimit: 0,
+                    LimitFlags: JOB_OBJECT_LIMIT_JOB_MEMORY,
+                    MinimumWorkingSetSize: 0,
+                    MaximumWorkingSetSize: 0,
+                    ActiveProcessLimit: 0,
+                    Affinity: 0,
+                    PriorityClass: 0,
+                    SchedulingClass: 0,
+                },
+                IoInfo: IO_COUNTERS {
+                    ReadOperationCount: 0,
+                    WriteOperationCount: 0,
+                    OtherOperationCount: 0,
+                    ReadTransferCount: 0,
+                    WriteTransferCount: 0,
+                    OtherTransferCount: 0,
+                },
+                ProcessMemoryLimit: 0,
+                JobMemoryLimit: limit,
+                PeakProcessMemoryUsed: 0,
+                PeakJobMemoryUsed: 0,
+            };
         let result = check_syscall(unsafe {
             SetInformationJobObject(
                 job_handle.0,
                 JobObjectExtendedLimitInformation,
-                job_information_ptr.cast(),
-                mem::size_of_val(&job_information)
+                job_information.cast(),
+                size_of_val_raw(job_information)
                     .try_into()
                     .expect("job information too large for WinAPI"),
             )
