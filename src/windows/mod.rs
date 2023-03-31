@@ -26,8 +26,8 @@ use windows_sys::Win32::System::JobObjects::JOBOBJECT_EXTENDED_LIMIT_INFORMATION
 use windows_sys::Win32::System::JobObjects::JOB_OBJECT_LIMIT_JOB_MEMORY;
 use windows_sys::Win32::System::Threading::GetExitCodeProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
+use windows_sys::Win32::System::Threading::INFINITE;
 use windows_sys::Win32::System::Threading::IO_COUNTERS;
-use windows_sys::Win32::System::WindowsProgramming::INFINITE;
 
 use super::WaitResult;
 
