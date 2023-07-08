@@ -18,6 +18,7 @@ pub(super) const MEMORY_LIMIT: usize = 104_857_600;
 macro_rules! assert_matches {
     ( $result:expr , $expected_result:pat $(,)? ) => {{
         let result = $result;
+        #[allow(clippy::redundant_pattern_matching)]
         if !matches!(result, $expected_result) {
             panic!(
                 "assertion failed: `(left matches right)`

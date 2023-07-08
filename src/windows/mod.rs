@@ -37,6 +37,7 @@ pub(super) use exit_status::ExitStatus;
 macro_rules! assert_matches {
     ( $result:expr , $expected_result:pat $(,)? ) => {{
         let result = $result;
+        #[allow(clippy::redundant_pattern_matching)]
         if !matches!(result, $expected_result) {
             panic!(
                 "assertion failed: `(left matches right)`
