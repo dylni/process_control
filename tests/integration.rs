@@ -79,10 +79,19 @@ fn test_terminate_if_running() -> io::Result<()> {
     thread::sleep(SHORT_TIME_LIMIT);
 
     process.terminate_if_running()?;
-    if cfg!(windows) {
-        assert!(process.kill().is_err());
-    } else {
-        process.kill()?;
+
+    #[cfg_attr(windows, allow(dead_code))]
+    fn check_result(result: &io::Result<()>) {
+        assert_matches!(result, Ok(()));
+    }
+    {
+        // https://github.com/rust-lang/rust/pull/112594
+        #[cfg(windows)]
+        #[rustversion::before(1.72.0)]
+        fn check_result(result: &io::Result<()>) {
+            assert!(result.is_err());
+        }
+        check_result(&process.kill());
     }
 
     Ok(())
