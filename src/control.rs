@@ -92,6 +92,7 @@ macro_rules! r#impl {
                 macro_rules! run_if_ok {
                     ( $get_result_fn:expr ) => {
                         if result.is_ok() {
+                            #[allow(clippy::redundant_closure_call)]
                             if let Err(error) = $get_result_fn() {
                                 result = Err(error);
                             }
