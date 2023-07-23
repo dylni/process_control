@@ -12,6 +12,7 @@ use super::super::check_syscall;
 use super::super::ExitStatus;
 use super::super::Handle;
 
+#[allow(unknown_lints)]
 #[allow(clippy::needless_pass_by_ref_mut)]
 pub(in super::super) fn wait(
     handle: &mut Handle<'_>,
