@@ -123,7 +123,6 @@ pub(super) struct Handle<'a> {
 impl<'a> Handle<'a> {
     #[cfg_attr(
         process_control_unix_waitid,
-        allow(unknown_lints),
         allow(clippy::needless_pass_by_ref_mut)
     )]
     pub(super) fn new(process: &'a mut Child) -> Self {
