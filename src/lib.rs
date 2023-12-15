@@ -22,10 +22,6 @@
 //!
 //! ### Optional Features
 //!
-//! - **crossbeam-channel** -
-//!   Changes the implementation to use crate [crossbeam-channel] for better
-//!   performance.
-//!
 //! - **parking\_lot** -
 //!   Changes the implementation to use crate [parking\_lot] on targets missing
 //!   some syscalls. This feature will reduce the likelihood of resource
@@ -77,7 +73,6 @@
 //! # Ok::<_, io::Error>(())
 //! ```
 //!
-//! [crossbeam-channel]: https://crates.io/crates/crossbeam-channel
 //! [parking\_lot]: https://crates.io/crates/parking_lot
 //! [`Receiver::recv_timeout`]: ::std::sync::mpsc::Receiver::recv_timeout
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
@@ -87,7 +82,6 @@
 // This is a private option that should not be used.
 // https://github.com/rust-lang/docs.rs/issues/147#issuecomment-389544407
 #![cfg_attr(process_control_docs_rs, feature(doc_cfg))]
-#![warn(unsafe_op_in_unsafe_fn)]
 #![warn(unused_results)]
 
 use std::fmt;

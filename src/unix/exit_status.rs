@@ -48,7 +48,7 @@ impl ExitStatusKind {
 macro_rules! code_method {
     ( $method:ident , $($kind_token:tt)+ ) => {
         pub(crate) fn $method(self) -> Option<c_int> {
-            matches!(self.kind, $($kind_token)+).then(|| self.value)
+            matches!(self.kind, $($kind_token)+).then_some(self.value)
         }
     };
 }

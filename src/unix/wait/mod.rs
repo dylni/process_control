@@ -1,3 +1,4 @@
+use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
@@ -33,25 +34,11 @@ where
     F: 'static + FnOnce() -> R + Send,
     R: 'static + Send,
 {
-    let time_limit = if let Some(time_limit) = time_limit {
-        time_limit
-    } else {
+    let Some(time_limit) = time_limit else {
         return Ok(Some(run_fn()));
     };
 
-    let (result_sender, result_receiver) = {
-        #[cfg(feature = "crossbeam-channel")]
-        {
-            crossbeam_channel::bounded(0)
-        }
-        #[cfg(not(feature = "crossbeam-channel"))]
-        {
-            use std::sync::mpsc;
-
-            mpsc::channel()
-        }
-    };
-
+    let (result_sender, result_receiver) = mpsc::channel();
     thread::Builder::new()
         .spawn(move || result_sender.send(run_fn()))
         .map(|_| result_receiver.recv_timeout(time_limit).ok())

@@ -132,9 +132,7 @@ impl Iterator for TimeLimits {
     type Item = NonZeroU32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let time_limit = if let Some(time_limit) = self.time_limit {
-            time_limit
-        } else {
+        let Some(time_limit) = self.time_limit else {
             const NON_ZERO_INFINITE: NonZeroU32 =
                 if let Some(result) = NonZeroU32::new(INFINITE) {
                     result
