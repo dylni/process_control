@@ -35,7 +35,7 @@ mod exit_status;
 pub(super) use exit_status::ExitStatus;
 
 macro_rules! assert_matches {
-    ( $result:expr , $expected_result:pat $(,)? ) => {{
+    ( $result:expr , $expected_result:pat ) => {{
         let result = $result;
         #[allow(clippy::redundant_pattern_matching)]
         if !matches!(result, $expected_result) {
@@ -156,17 +156,17 @@ impl Iterator for TimeLimits {
 }
 
 #[derive(Debug)]
-pub(super) struct Handle<'a> {
-    process: &'a mut Child,
+pub(super) struct Process<'a> {
+    inner: &'a mut Child,
     handle: RawHandle,
     job_handle: JobHandle,
 }
 
-impl<'a> Handle<'a> {
+impl<'a> Process<'a> {
     pub(super) fn new(process: &'a mut Child) -> Self {
         Self {
             handle: RawHandle::new(process),
-            process,
+            inner: process,
             job_handle: JobHandle(None),
         }
     }
@@ -222,7 +222,7 @@ impl<'a> Handle<'a> {
         if let Err(error) = &result {
             // This error will occur when the job has a low memory limit.
             return if raw_os_error(error) == Some(ERROR_INVALID_PARAMETER) {
-                self.process.kill()
+                self.inner.kill()
             } else {
                 result
             };
@@ -257,16 +257,16 @@ impl<'a> Handle<'a> {
 }
 
 pub(super) fn terminate_if_running(process: &mut Child) -> io::Result<()> {
-    process.kill().or_else(|error| {
-        if raw_os_error(&error) == Some(ERROR_ACCESS_DENIED)
+    let result = process.kill();
+    if let Err(error) = &result {
+        if raw_os_error(error) == Some(ERROR_ACCESS_DENIED)
             && matches!(
-                Handle::new(process).get_exit_code(),
+                Process::new(process).get_exit_code(),
                 Ok(x) if x.try_into() != Ok(STILL_ACTIVE),
             )
         {
-            Ok(())
-        } else {
-            Err(error)
+            return Ok(());
         }
-    })
+    }
+    result
 }

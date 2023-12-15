@@ -47,7 +47,7 @@ macro_rules! r#impl {
                     return Ok(Some(exit_status.into()));
                 }
 
-                let mut handle = imp::Handle::new(&mut self.process);
+                let mut handle = imp::Process::new(&mut self.process);
                 #[cfg(process_control_memory_limit)]
                 if let Some(memory_limit) = self.memory_limit {
                     handle.set_memory_limit(memory_limit)?;

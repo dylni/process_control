@@ -4,12 +4,15 @@ use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Arc;
+#[cfg(not(feature = "parking_lot"))]
+use std::sync::PoisonError;
 use std::time::Duration;
 
 #[cfg(feature = "parking_lot")]
 use parking_lot as sync;
 #[cfg(not(feature = "parking_lot"))]
 use std::sync;
+
 use sync::Mutex;
 
 use signal_hook::consts::SIGCHLD;
@@ -18,7 +21,7 @@ use signal_hook::iterator::Signals;
 use crate::WaitResult;
 
 use super::super::ExitStatus;
-use super::super::Handle;
+use super::super::Process;
 
 unsafe fn transmute_lifetime_mut<'a, T>(value: &mut T) -> &'a mut T
 where
@@ -38,7 +41,7 @@ impl<'a, T> MutexGuard<'a, T> {
     fn lock(mutex: &'a Mutex<T>, fair: bool) -> Self {
         let guard = mutex.lock();
         #[cfg(not(feature = "parking_lot"))]
-        let guard = guard.unwrap();
+        let guard = guard.unwrap_or_else(PoisonError::into_inner);
         Self {
             guard: ManuallyDrop::new(guard),
             #[cfg(feature = "parking_lot")]
@@ -76,11 +79,11 @@ fn run_on_drop<F>(drop_fn: F) -> impl Drop
 where
     F: FnOnce(),
 {
-    struct Dropper<F>(ManuallyDrop<F>)
+    struct DropBuffer<F>(ManuallyDrop<F>)
     where
         F: FnOnce();
 
-    impl<F> Drop for Dropper<F>
+    impl<F> Drop for DropBuffer<F>
     where
         F: FnOnce(),
     {
@@ -89,16 +92,16 @@ where
         }
     }
 
-    Dropper(ManuallyDrop::new(drop_fn))
+    DropBuffer(ManuallyDrop::new(drop_fn))
 }
 
 pub(in super::super) fn wait(
-    handle: &mut Handle<'_>,
+    process: &mut Process<'_>,
     time_limit: Option<Duration>,
 ) -> WaitResult<ExitStatus> {
     // SAFETY: The process is removed by [_guard] before this function returns.
     let process = Arc::new(Mutex::new(Some(unsafe {
-        transmute_lifetime_mut(handle.process)
+        transmute_lifetime_mut(process.inner)
     })));
     let _guard = run_on_drop(|| {
         let _ = MutexGuard::lock(&process, false).take();

@@ -89,6 +89,8 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io;
+#[cfg(any(doc, unix))]
+use std::os::raw::c_int;
 use std::process;
 use std::process::Child;
 use std::str;
@@ -180,8 +182,8 @@ impl ExitStatus {
 
     unix_method!(continued, bool);
     unix_method!(core_dumped, bool);
-    unix_method!(signal, Option<::std::os::raw::c_int>);
-    unix_method!(stopped_signal, Option<::std::os::raw::c_int>);
+    unix_method!(signal, Option<c_int>);
+    unix_method!(stopped_signal, Option<c_int>);
 }
 
 impl AsMut<Self> for ExitStatus {

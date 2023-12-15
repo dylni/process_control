@@ -10,14 +10,13 @@ use crate::WaitResult;
 
 use super::super::check_syscall;
 use super::super::ExitStatus;
-use super::super::Handle;
+use super::super::Process;
 
-#[allow(clippy::needless_pass_by_ref_mut)]
 pub(in super::super) fn wait(
-    handle: &mut Handle<'_>,
+    process: &mut Process<'_>,
     time_limit: Option<Duration>,
 ) -> WaitResult<ExitStatus> {
-    let pid = handle.pid.as_id();
+    let pid = process.pid.as_id();
     super::run_with_time_limit(
         move || loop {
             let mut process_info = MaybeUninit::uninit();

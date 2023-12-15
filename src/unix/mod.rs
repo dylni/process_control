@@ -10,10 +10,10 @@ use super::WaitResult;
 
 macro_rules! if_waitid {
     ( $($item:item)+ ) => {
-        $(
-            #[cfg(process_control_unix_waitid)]
-            $item
-        )+
+    $(
+        #[cfg(process_control_unix_waitid)]
+        $item
+    )+
     };
 }
 
@@ -24,10 +24,10 @@ mod wait;
 
 macro_rules! if_memory_limit {
     ( $($item:item)+ ) => {
-        $(
-            #[cfg(process_control_memory_limit)]
-            $item
-        )+
+    $(
+        #[cfg(process_control_memory_limit)]
+        $item
+    )+
     };
 }
 
@@ -41,13 +41,10 @@ if_memory_limit! {
 
 macro_rules! if_raw_pid {
     ( $($item:item)+ ) => {
-        $(
-            #[cfg(any(
-                process_control_memory_limit,
-                process_control_unix_waitid,
-            ))]
-            $item
-        )+
+    $(
+        #[cfg(any(process_control_memory_limit, process_control_unix_waitid))]
+        $item
+    )+
     };
 }
 
@@ -112,19 +109,15 @@ if_raw_pid! {
 }
 
 #[derive(Debug)]
-pub(super) struct Handle<'a> {
+pub(super) struct Process<'a> {
     #[cfg(not(process_control_unix_waitid))]
-    process: &'a mut Child,
+    inner: &'a mut Child,
     #[cfg(any(process_control_memory_limit, process_control_unix_waitid))]
     pid: RawPid,
     _marker: PhantomData<&'a ()>,
 }
 
-impl<'a> Handle<'a> {
-    #[cfg_attr(
-        process_control_unix_waitid,
-        allow(clippy::needless_pass_by_ref_mut)
-    )]
+impl<'a> Process<'a> {
     pub(super) fn new(process: &'a mut Child) -> Self {
         Self {
             #[cfg(any(
@@ -133,7 +126,7 @@ impl<'a> Handle<'a> {
             ))]
             pid: RawPid::new(process),
             #[cfg(not(process_control_unix_waitid))]
-            process,
+            inner: process,
             _marker: PhantomData,
         }
     }

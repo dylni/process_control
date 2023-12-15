@@ -58,7 +58,7 @@ fn test_large_output() -> io::Result<()> {
         .time_limit(LONG_TIME_LIMIT)
         .strict_errors()
         .wait()?
-        .unwrap();
+        .expect("process timed out");
 
     assert_eq!(Some(0), output.status.code());
 
