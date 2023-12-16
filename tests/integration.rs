@@ -5,25 +5,25 @@ use std::thread;
 
 use process_control::ChildExt;
 use process_control::Control;
-use process_control::ExitStatus;
 
 #[macro_use]
 mod common;
+use common::Limit;
 use common::LONG_TIME_LIMIT;
 use common::SHORT_TIME_LIMIT;
 
 #[test]
-fn test_stdin() -> io::Result<()> {
+fn test_stdin() {
     let mut command = Command::new("perl");
     let _ = command.stdin(Stdio::piped());
 
-    test!(
+    test_common!(
         command: command,
-        time_limit: LONG_TIME_LIMIT,
+        limit: Limit::Time(LONG_TIME_LIMIT),
         terminating: false,
         expected_result: Some(Some(0)),
         running: false,
-    )
+    );
 }
 
 #[test]

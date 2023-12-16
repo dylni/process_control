@@ -1,16 +1,11 @@
 #![cfg(process_control_memory_limit)]
 
-use std::io;
 use std::process::Command;
 use std::process::Stdio;
-use std::thread;
-
-use process_control::ChildExt;
-use process_control::Control;
-use process_control::ExitStatus;
 
 #[macro_use]
 mod common;
+use common::Limit;
 use common::MEMORY_LIMIT;
 use common::SHORT_TIME_LIMIT;
 
@@ -27,26 +22,35 @@ fn create_command(bytes: usize) -> Command {
     command
 }
 
-#[test]
-fn test_accept() -> io::Result<()> {
-    test!(
-        command: create_command(MEMORY_LIMIT),
-        memory_limit: 2 * MEMORY_LIMIT,
-        terminating: false,
-        expected_result: Some(Some(0)),
-        running: false,
-    )
+macro_rules! test {
+    (
+        limit: $limit:expr ,
+        expected_result: $expected_result:pat ,
+    ) => {
+        test_common!(
+            command: create_command(MEMORY_LIMIT),
+            limit: Limit::Memory($limit),
+            terminating: false,
+            expected_result: $expected_result,
+            running: false,
+        );
+    };
 }
 
 #[test]
-fn test_reject() -> io::Result<()> {
+fn test_accept() {
     test!(
-        command: create_command(MEMORY_LIMIT),
-        memory_limit: MEMORY_LIMIT,
-        terminating: false,
+        limit: 2 * MEMORY_LIMIT,
+        expected_result: Some(Some(0)),
+    );
+}
+
+#[test]
+fn test_reject() {
+    test!(
+        limit: MEMORY_LIMIT,
         expected_result: Some(Some(1)),
-        running: false,
-    )
+    );
 }
 
 #[cfg(windows)]
@@ -63,23 +67,17 @@ macro_rules! memory_limit_0_result {
 }
 
 #[test]
-fn test_0() -> io::Result<()> {
+fn test_0() {
     test!(
-        command: create_command(MEMORY_LIMIT),
-        memory_limit: 0,
-        terminating: false,
+        limit: 0,
         expected_result: Some(memory_limit_0_result!()),
-        running: false,
-    )
+    );
 }
 
 #[test]
-fn test_1() -> io::Result<()> {
+fn test_1() {
     test!(
-        command: create_command(MEMORY_LIMIT),
-        memory_limit: 1,
-        terminating: false,
+        limit: 1,
         expected_result: Some(memory_limit_0_result!()),
-        running: false,
-    )
+    );
 }

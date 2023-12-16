@@ -1,11 +1,18 @@
 #![allow(dead_code)]
 
+use std::io;
 use std::process::Command;
+use std::thread;
 use std::time::Duration;
+
+use process_control::ChildExt;
+use process_control::Control;
+use process_control::ExitStatus;
 
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
-pub(super) mod imp;
+mod imp;
+pub(super) use imp::Handle;
 
 pub(super) const SHORT_TIME_LIMIT: Duration = Duration::from_secs(2);
 
@@ -15,101 +22,158 @@ pub(super) const LONG_TIME_LIMIT: Duration = Duration::from_secs(5);
 pub(super) const MEMORY_LIMIT: usize = 104_857_600;
 
 macro_rules! assert_matches {
-    ( $result:expr , $expected_result:pat $(,)? ) => {{
+    ( $result:expr , $($token:tt)* ) => {{
         let result = $result;
-        #[allow(clippy::redundant_pattern_matching)]
-        if !matches!(result, $expected_result) {
+        if !matches!(result, $($token)*) {
             panic!(
                 "assertion failed: `(left matches right)`
   left: `{:?}`
  right: `{:?}`",
                 result,
-                stringify!($expected_result),
+                stringify!($($token)*),
             );
         }
     }};
 }
 
-macro_rules! test {
-    ( command: $command:expr , $($token:tt)* ) => {{
-        test!(@output $command, controlled, $($token)*);
-        test!(@output $command, controlled_with_output, $($token)*);
-        Ok(())
-    }};
-    (
-        @output
-        $command:expr ,
-        $method:ident ,
-        $type:ident : $limit:expr ,
-        $($token:tt)*
-    ) => {{
-        use $crate::common::imp::Handle;
+#[derive(Clone, Copy)]
+pub(super) enum Limit {
+    #[cfg(process_control_memory_limit)]
+    Memory(usize),
+    Time(Duration),
+}
 
-        let mut handle;
-        test!(
-            @$type
-            {
-                let process = $command.spawn()?;
-                handle = Handle::new(&process)?;
-                process
-            }.$method(),
-            $limit,
-            handle,
-            $($token)*
-        );
-    }};
-    ( @memory_limit $control:expr , $limit:expr , $($token:tt)* ) => {{
-        use $crate::common::LONG_TIME_LIMIT;
+#[derive(Clone, Copy)]
+pub(super) struct __Test {
+    pub(super) is_expected_fn: fn(Option<Option<i64>>) -> bool,
+    pub(super) running: bool,
+}
 
-        test!(@strict_errors $control.memory_limit($limit), $($token)*);
-        test!(
-            @strict_errors
-            $control.memory_limit($limit).time_limit(LONG_TIME_LIMIT),
-            $($token)*
-        );
-    }};
-    ( @time_limit $control:expr , $limit:expr , $($token:tt)* ) => {{
-        test!(@strict_errors $control.time_limit($limit), $($token)*);
+impl __Test {
+    unsafe fn run_one<F>(self, mut wait_fn: F)
+    where
+        F: FnMut() -> io::Result<Result<ExitStatus, Handle>>,
+    {
+        let exit_code = wait_fn()
+            .expect("failed to run process")
+            .map(ExitStatus::code);
+        assert!((self.is_expected_fn)(exit_code.as_ref().ok().copied()));
+
+        if self.running {
+            thread::sleep(SHORT_TIME_LIMIT);
+        }
+        match exit_code {
+            Ok(_) => assert!(!self.running),
+            Err(handle) => {
+                assert_matches!(
+                    unsafe { handle.is_running() },
+                    Ok(x) if x == self.running,
+                );
+            }
+        }
+    }
+
+    fn run_many(self, options: &mut __Options) {
+        macro_rules! run_one {
+            ( $method:ident ) => {
+                unsafe {
+                    self.run_one(|| {
+                        #[allow(unused_mut)]
+                        let mut process = options.command.spawn()?;
+                        let handle = Handle::new(&process)?;
+                        options
+                            .wait(process.$method())
+                            .map(|x| x.ok_or(handle))
+                    });
+                }
+            };
+        }
+
+        for strict_errors in [false, true] {
+            options.strict_errors = strict_errors;
+            run_one!(controlled);
+            run_one!(controlled_with_output);
+        }
+    }
+
+    pub(super) fn run(self, mut options: __Options, limit: Limit) {
+        match limit {
+            #[cfg(process_control_memory_limit)]
+            Limit::Memory(limit) => {
+                options.memory_limit = limit;
+                self.run_many(&mut options);
+
+                options.time_limit = Some(LONG_TIME_LIMIT);
+                self.run_many(&mut options);
+            }
+            Limit::Time(limit) => {
+                options.time_limit = Some(limit);
+                self.run_many(&mut options);
+            }
+        }
+    }
+}
+
+pub(super) struct __Options {
+    command: Command,
+    #[cfg(process_control_memory_limit)]
+    memory_limit: usize,
+    strict_errors: bool,
+    terminating: bool,
+    time_limit: Option<Duration>,
+}
+
+impl __Options {
+    pub(super) const fn new(command: Command, terminating: bool) -> Self {
+        Self {
+            command,
+            #[cfg(process_control_memory_limit)]
+            memory_limit: MEMORY_LIMIT,
+            strict_errors: false,
+            terminating,
+            time_limit: None,
+        }
+    }
+
+    fn wait<C>(&mut self, mut control: C) -> io::Result<Option<ExitStatus>>
+    where
+        C: Control,
+        C::Result: Into<ExitStatus>,
+    {
         #[cfg(process_control_memory_limit)]
         {
-            use $crate::common::MEMORY_LIMIT;
-
-            test!(
-                @strict_errors
-                $control.time_limit($limit).memory_limit(MEMORY_LIMIT),
-                $($token)*
-            );
+            control = control.memory_limit(self.memory_limit);
         }
-    }};
-    ( @strict_errors $control:expr , $($token:tt)* ) => {{
-        test!($control, $($token)*);
-        test!($control.strict_errors(), $($token)*);
-    }};
-    ( $control:expr , $handle:expr , terminating: true, $($token:tt)* ) => {
-        test!(
-            $control.terminate_for_timeout(),
-            $handle,
-            terminating: false,
-            $($token)*
-        )
-    };
+        if self.strict_errors {
+            control = control.strict_errors();
+        }
+        if self.terminating {
+            control = control.terminate_for_timeout();
+        }
+        if let Some(time_limit) = self.time_limit {
+            control = control.time_limit(time_limit);
+        }
+        control.wait().map(|x| x.map(Into::into))
+    }
+}
+
+macro_rules! test_common {
     (
-        $control:expr ,
-        $handle:expr ,
-        terminating: false ,
+        command: $command:expr ,
+        limit: $limit:expr ,
+        terminating: $terminating:expr ,
         expected_result: $expected_result:pat ,
         running: $running:expr ,
     ) => {{
-        assert_matches!(
-            $control.wait()?.map(|x| ExitStatus::from(x).code()),
-            $expected_result,
-        );
+        use $crate::common::__Options;
+        use $crate::common::__Test;
 
-        let running = $running;
-        if running {
-            thread::sleep(SHORT_TIME_LIMIT);
+        __Test {
+            #[allow(clippy::redundant_pattern_matching)]
+            is_expected_fn: |x| matches!(x, $expected_result),
+            running: $running,
         }
-        assert_eq!(running, unsafe { $handle.is_running()? });
+        .run(__Options::new($command, $terminating), $limit);
     }};
 }
 
