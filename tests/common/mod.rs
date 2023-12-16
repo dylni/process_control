@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::io;
+use std::process::Child;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
@@ -34,6 +35,16 @@ macro_rules! assert_matches {
             );
         }
     }};
+}
+
+pub(super) trait Spawn {
+    fn spawn(&mut self) -> io::Result<Child>;
+}
+
+impl Spawn for Command {
+    fn spawn(&mut self) -> io::Result<Child> {
+        self.spawn()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -73,7 +84,10 @@ impl __Test {
         }
     }
 
-    fn run_many(self, options: &mut __Options) {
+    fn run_many<T>(self, options: &mut __Options<T>)
+    where
+        T: Spawn,
+    {
         macro_rules! run_one {
             ( $method:ident ) => {
                 unsafe {
@@ -96,7 +110,10 @@ impl __Test {
         }
     }
 
-    pub(super) fn run(self, mut options: __Options, limit: Limit) {
+    pub(super) fn run<T>(self, mut options: __Options<T>, limit: Limit)
+    where
+        T: Spawn,
+    {
         match limit {
             #[cfg(process_control_memory_limit)]
             Limit::Memory(limit) => {
@@ -114,8 +131,11 @@ impl __Test {
     }
 }
 
-pub(super) struct __Options {
-    command: Command,
+pub(super) struct __Options<T>
+where
+    T: Spawn,
+{
+    command: T,
     #[cfg(process_control_memory_limit)]
     memory_limit: usize,
     strict_errors: bool,
@@ -123,8 +143,11 @@ pub(super) struct __Options {
     time_limit: Option<Duration>,
 }
 
-impl __Options {
-    pub(super) const fn new(command: Command, terminating: bool) -> Self {
+impl<T> __Options<T>
+where
+    T: Spawn,
+{
+    pub(super) const fn new(command: T, terminating: bool) -> Self {
         Self {
             command,
             #[cfg(process_control_memory_limit)]
