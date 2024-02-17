@@ -164,6 +164,7 @@ macro_rules! unix_method {
 
 /// Equivalent to [`process::ExitStatus`] but allows for greater accuracy.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[must_use]
 pub struct ExitStatus(imp::ExitStatus);
 
 impl ExitStatus {
@@ -219,6 +220,7 @@ impl From<process::ExitStatus> for ExitStatus {
 /// Equivalent to [`process::Output`] but holds an instance of [`ExitStatus`]
 /// from this crate.
 #[derive(Clone, Eq, PartialEq)]
+#[must_use]
 pub struct Output {
     /// Equivalent to [`process::Output::status`].
     pub status: ExitStatus,
