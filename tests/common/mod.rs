@@ -61,7 +61,7 @@ pub(super) struct __Test {
 }
 
 impl __Test {
-    unsafe fn run_one<F>(self, mut wait_fn: F)
+    fn run_one<F>(self, mut wait_fn: F)
     where
         F: FnMut() -> io::Result<Result<ExitStatus, Handle>>,
     {
@@ -77,7 +77,7 @@ impl __Test {
             Ok(_) => assert!(!self.running),
             Err(handle) => {
                 assert_matches!(
-                    unsafe { handle.is_running() },
+                    handle.is_possibly_running(),
                     Ok(x) if x == self.running,
                 );
             }
@@ -90,16 +90,12 @@ impl __Test {
     {
         macro_rules! run_one {
             ( $method:ident ) => {
-                unsafe {
-                    self.run_one(|| {
-                        #[allow(unused_mut)]
-                        let mut process = options.command.spawn()?;
-                        let handle = Handle::new(&process)?;
-                        options
-                            .wait(process.$method())
-                            .map(|x| x.ok_or(handle))
-                    });
-                }
+                self.run_one(|| {
+                    #[allow(unused_mut)]
+                    let mut process = options.command.spawn()?;
+                    let handle = Handle::new(&process)?;
+                    options.wait(process.$method()).map(|x| x.ok_or(handle))
+                });
             };
         }
 

@@ -1,58 +1,33 @@
 use std::io;
+use std::os::windows::io::AsHandle;
 use std::os::windows::io::AsRawHandle;
+use std::os::windows::io::OwnedHandle;
 use std::process::Child;
 
-use windows_sys::Win32::Foundation::CloseHandle;
-use windows_sys::Win32::Foundation::DuplicateHandle;
-use windows_sys::Win32::Foundation::BOOL;
-use windows_sys::Win32::Foundation::DUPLICATE_SAME_ACCESS;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
 use windows_sys::Win32::Foundation::WAIT_TIMEOUT;
-use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
-const TRUE: BOOL = 1;
-
-fn check_syscall(result: BOOL) -> io::Result<()> {
-    if result == TRUE {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+fn raw_handle<T>(handle: &T) -> HANDLE
+where
+    T: AsRawHandle + ?Sized,
+{
+    handle.as_raw_handle() as _
 }
 
-pub(crate) struct Handle(HANDLE);
+pub(crate) struct Handle(OwnedHandle);
 
 impl Handle {
     pub(crate) fn new(process: &Child) -> io::Result<Self> {
-        let parent_handle = unsafe { GetCurrentProcess() };
-        let mut handle = 0;
-        check_syscall(unsafe {
-            DuplicateHandle(
-                parent_handle,
-                process.as_raw_handle() as HANDLE,
-                parent_handle,
-                &mut handle,
-                0,
-                TRUE,
-                DUPLICATE_SAME_ACCESS,
-            )
-        })?;
-        Ok(Self(handle))
+        process.as_handle().try_clone_to_owned().map(Self)
     }
 
-    pub(crate) unsafe fn is_running(&self) -> io::Result<bool> {
-        match unsafe { WaitForSingleObject(self.0, 0) } {
+    pub(crate) fn is_possibly_running(&self) -> io::Result<bool> {
+        match unsafe { WaitForSingleObject(raw_handle(&self.0), 0) } {
             WAIT_OBJECT_0 => Ok(false),
             WAIT_TIMEOUT => Ok(true),
             _ => Err(io::Error::last_os_error()),
         }
-    }
-}
-
-impl Drop for Handle {
-    fn drop(&mut self) {
-        let _ = unsafe { CloseHandle(self.0) };
     }
 }

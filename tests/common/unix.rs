@@ -14,19 +14,16 @@ fn check_syscall(result: c_int) -> io::Result<()> {
     }
 }
 
-pub(crate) struct Handle(u32);
+pub(crate) struct Handle(pid_t);
 
 impl Handle {
     pub(crate) fn new(process: &Child) -> io::Result<Self> {
-        Ok(Self(process.id()))
+        let pid = process.id();
+        Ok(Self(pid.try_into().expect("process identifier is invalid")))
     }
 
-    fn as_pid(&self) -> pid_t {
-        self.0.try_into().expect("process identifier is invalid")
-    }
-
-    pub(crate) unsafe fn is_running(&self) -> io::Result<bool> {
-        check_syscall(unsafe { libc::kill(self.as_pid(), 0) })
+    pub(crate) fn is_possibly_running(&self) -> io::Result<bool> {
+        check_syscall(unsafe { libc::kill(self.0, 0) })
             .map(|()| true)
             .or_else(|error| {
                 if error.raw_os_error() == Some(ESRCH) {
