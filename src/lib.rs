@@ -9,10 +9,12 @@
 //! implemented for [`Child`]. They each return a builder of options to
 //! configure how the limit should be applied.
 //!
-//! <div style="background:rgba(255,181,77,0.16); padding:0.75em;">
-//! <strong>Warning</strong>: This crate should not be used for security. There
-//! are many ways that a process can bypass resource limits. The limits are
-//! only intended for simple restriction of harmless processes.
+//! <div class="warning">
+//!
+//! This crate should not be used for security. There are many ways that a
+//! process can bypass resource limits. The limits are only intended for simple
+//! restriction of harmless processes.
+//!
 //! </div>
 //!
 //! # Features
@@ -470,9 +472,9 @@ pub trait ChildExt<'a>: private::Sealed {
 }
 
 impl<'a> ChildExt<'a> for Child {
-    type ExitStatusControl = control::ExitStatusControl<'a>;
+    type ExitStatusControl = control::Buffer<&'a mut Self>;
 
-    type OutputControl = control::OutputControl;
+    type OutputControl = control::Buffer<Self>;
 
     #[inline]
     fn terminate_if_running(&mut self) -> io::Result<()> {
@@ -497,6 +499,5 @@ mod private {
 
     pub trait Sealed {}
     impl Sealed for Child {}
-    impl Sealed for control::ExitStatusControl<'_> {}
-    impl Sealed for control::OutputControl {}
+    impl<P> Sealed for control::Buffer<P> where P: control::Process {}
 }

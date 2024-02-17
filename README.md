@@ -15,7 +15,7 @@ should be applied.
 that a process can bypass resource limits. The limits are only intended for
 simple restriction of harmless processes.*
 
-[![GitHub Build Status](https://github.com/dylni/process_control/workflows/build/badge.svg?branch=master)](https://github.com/dylni/process_control/actions?query=branch%3Amaster)
+[![GitHub Build Status](https://github.com/dylni/process_control/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/dylni/process_control/actions/workflows/build.yml?query=branch%3Amaster)
 
 ## Usage
 

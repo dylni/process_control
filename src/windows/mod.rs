@@ -78,11 +78,6 @@ impl RawHandle {
     }
 }
 
-// SAFETY: Process handles are thread-safe:
-// https://stackoverflow.com/questions/12212628/win32-handles-and-multithread/12214212#12214212
-unsafe impl Send for RawHandle {}
-unsafe impl Sync for RawHandle {}
-
 #[derive(Debug)]
 struct JobHandle(Option<RawHandle>);
 
