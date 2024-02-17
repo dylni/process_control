@@ -410,6 +410,12 @@ pub trait ChildExt<'a>: private::Sealed {
     ///
     /// Windows and Unix errors are inconsistent when terminating processes.
     /// This method unifies them by simulating Unix behavior on Windows.
+    ///
+    /// *This method is no longer necessary, as the standard library has been
+    /// [updated] to perform the same unification.*
+    ///
+    /// [updated]: https://github.com/rust-lang/rust/pull/112594
+    #[deprecated(since = "4.1.0", note = "use `Child::kill` instead")]
     fn terminate_if_running(&mut self) -> io::Result<()>;
 
     /// Creates an instance of [`Control`] that yields [`ExitStatus`] for this
@@ -480,7 +486,7 @@ impl<'a> ChildExt<'a> for Child {
 
     #[inline]
     fn terminate_if_running(&mut self) -> io::Result<()> {
-        imp::terminate_if_running(self)
+        self.kill()
     }
 
     #[inline]

@@ -17,13 +17,12 @@ macro_rules! targets {
         env::var_os(concat!("CARGO_CFG_TARGET_", stringify!($name)))
             .as_deref()
             .and_then(OsStr::to_str)
-            .map(|values| {
+            .is_some_and(|values| {
                 let values: Vec<_> = values.split(',').collect();
                 [$(stringify!($value)),+]
                     .into_iter()
                     .any(|x| values.contains(&x))
             })
-            .unwrap_or(false)
     };
 }
 

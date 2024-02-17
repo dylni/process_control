@@ -11,10 +11,8 @@ use std::time::Instant;
 
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::BOOL;
-use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::Foundation::ERROR_INVALID_PARAMETER;
 use windows_sys::Win32::Foundation::HANDLE;
-use windows_sys::Win32::Foundation::STILL_ACTIVE;
 use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
 use windows_sys::Win32::Foundation::WAIT_TIMEOUT;
 use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
@@ -249,19 +247,4 @@ impl<'a> Process<'a> {
         }
         Ok(None)
     }
-}
-
-pub(super) fn terminate_if_running(process: &mut Child) -> io::Result<()> {
-    let result = process.kill();
-    if let Err(error) = &result {
-        if raw_os_error(error) == Some(ERROR_ACCESS_DENIED)
-            && matches!(
-                Process::new(process).get_exit_code(),
-                Ok(x) if x.try_into() != Ok(STILL_ACTIVE),
-            )
-        {
-            return Ok(());
-        }
-    }
-    result
 }

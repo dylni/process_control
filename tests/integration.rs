@@ -68,6 +68,7 @@ fn test_large_output() -> io::Result<()> {
     Ok(())
 }
 
+#[allow(deprecated)]
 #[test]
 fn test_terminate_if_running() -> io::Result<()> {
     let mut process =

@@ -42,7 +42,7 @@ impl Reader {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Limits {
+struct Limits {
     #[cfg(process_control_memory_limit)]
     memory: Option<usize>,
     time: Option<Duration>,
@@ -53,6 +53,7 @@ pub trait Process {
 
     fn get(&mut self) -> &mut Child;
 
+    #[allow(private_interfaces)]
     fn run_wait(&mut self, limits: Limits) -> WaitResult<Self::Result>;
 }
 
@@ -63,6 +64,7 @@ impl Process for &mut Child {
         self
     }
 
+    #[allow(private_interfaces)]
     fn run_wait(&mut self, limits: Limits) -> WaitResult<Self::Result> {
         let result = self.try_wait();
         if let Ok(Some(exit_status)) = result {
@@ -85,6 +87,7 @@ impl Process for Child {
         self
     }
 
+    #[allow(private_interfaces)]
     fn run_wait(&mut self, limits: Limits) -> WaitResult<Self::Result> {
         macro_rules! reader {
             ( $stream:ident ) => {
@@ -188,8 +191,7 @@ where
         // If the process exited normally, identifier reuse might cause a
         // different process to be terminated.
         if self.terminate_for_timeout && !matches!(result, Ok(Some(_))) {
-            let next_result = imp::terminate_if_running(process)
-                .and_then(|()| process.wait());
+            let next_result = process.kill().and_then(|()| process.wait());
             if self.strict_errors {
                 run_if_ok!(|| next_result);
             }

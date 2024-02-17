@@ -1,4 +1,3 @@
-use std::io;
 use std::marker::PhantomData;
 use std::process::Child;
 use std::time::Duration;
@@ -50,6 +49,7 @@ macro_rules! if_raw_pid {
 
 if_raw_pid! {
     use std::convert::TryInto;
+    use std::io;
     use std::os::raw::c_int;
 
     use libc::pid_t;
@@ -182,8 +182,4 @@ impl<'a> Process<'a> {
     ) -> WaitResult<ExitStatus> {
         wait::wait(self, time_limit)
     }
-}
-
-pub(super) fn terminate_if_running(process: &mut Child) -> io::Result<()> {
-    process.kill()
 }
