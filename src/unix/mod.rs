@@ -31,7 +31,6 @@ macro_rules! if_memory_limit {
 }
 
 if_memory_limit! {
-    use std::convert::TryFrom;
     use std::ptr;
 
     use libc::rlimit;
@@ -48,7 +47,6 @@ macro_rules! if_raw_pid {
 }
 
 if_raw_pid! {
-    use std::convert::TryInto;
     use std::io;
     use std::os::raw::c_int;
 

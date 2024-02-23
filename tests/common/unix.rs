@@ -1,4 +1,3 @@
-use std::convert::TryInto;
 use std::io;
 use std::os::raw::c_int;
 use std::process::Child;
