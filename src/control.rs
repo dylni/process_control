@@ -45,6 +45,8 @@ impl Reader {
 struct Limits {
     #[cfg(process_control_memory_limit)]
     memory: Option<usize>,
+    #[cfg(process_control_cpu_limit)]
+    cpu: Option<u32>,
     time: Option<Duration>,
 }
 
@@ -76,6 +78,12 @@ impl Process for &mut Child {
         if let Some(memory_limit) = limits.memory {
             handle.set_memory_limit(memory_limit)?;
         }
+
+        #[cfg(process_control_cpu_limit)]
+        if let Some(cpu_limit) = limits.cpu {
+            handle.set_cpu_limit(cpu_limit)?;
+        }
+
         handle.wait(limits.time).map(|x| x.map(ExitStatus))
     }
 }
@@ -132,6 +140,8 @@ where
             limits: Limits {
                 #[cfg(process_control_memory_limit)]
                 memory: None,
+                #[cfg(process_control_cpu_limit)]
+                cpu: None,
                 time: None,
             },
             strict_errors: false,
@@ -150,6 +160,13 @@ where
     #[inline]
     fn memory_limit(mut self, limit: usize) -> Self {
         self.limits.memory = Some(limit);
+        self
+    }
+
+    #[cfg(any(doc, process_control_cpu_limit))]
+    #[inline]
+    fn cpu_limit(mut self, limit: u32) -> Self {
+        self.limits.cpu = Some(limit);
         self
     }
 

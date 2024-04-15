@@ -16,10 +16,15 @@ use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
 use windows_sys::Win32::Foundation::WAIT_TIMEOUT;
 use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
 use windows_sys::Win32::System::JobObjects::CreateJobObjectW;
+use windows_sys::Win32::System::JobObjects::JobObjectCpuRateControlInformation;
 use windows_sys::Win32::System::JobObjects::JobObjectExtendedLimitInformation;
 use windows_sys::Win32::System::JobObjects::SetInformationJobObject;
 use windows_sys::Win32::System::JobObjects::JOBOBJECT_BASIC_LIMIT_INFORMATION;
+use windows_sys::Win32::System::JobObjects::JOBOBJECT_CPU_RATE_CONTROL_INFORMATION;
+use windows_sys::Win32::System::JobObjects::JOBOBJECT_CPU_RATE_CONTROL_INFORMATION_0;
 use windows_sys::Win32::System::JobObjects::JOBOBJECT_EXTENDED_LIMIT_INFORMATION;
+use windows_sys::Win32::System::JobObjects::JOB_OBJECT_CPU_RATE_CONTROL_ENABLE;
+use windows_sys::Win32::System::JobObjects::JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP;
 use windows_sys::Win32::System::JobObjects::JOB_OBJECT_LIMIT_JOB_MEMORY;
 use windows_sys::Win32::System::Threading::GetExitCodeProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
@@ -213,6 +218,41 @@ impl<'a> Process<'a> {
         });
         if let Err(error) = &result {
             // This error will occur when the job has a low memory limit.
+            return if raw_os_error(error) == Some(ERROR_INVALID_PARAMETER) {
+                self.inner.kill()
+            } else {
+                result
+            };
+        }
+
+        check_syscall(unsafe {
+            AssignProcessToJobObject(job_handle.0, self.handle.0)
+        })
+    }
+
+    pub(super) fn set_cpu_limit(&mut self, limit: u32) -> io::Result<()> {
+        self.job_handle.close()?;
+
+        let job_handle = self.job_handle.init()?;
+        let job_information: *const _ =
+            &JOBOBJECT_CPU_RATE_CONTROL_INFORMATION {
+                ControlFlags: JOB_OBJECT_CPU_RATE_CONTROL_ENABLE
+                    | JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP,
+                Anonymous: JOBOBJECT_CPU_RATE_CONTROL_INFORMATION_0 {
+                    CpuRate: limit * 100 / num_cpus::get() as u32,
+                },
+            };
+        let result = check_syscall(unsafe {
+            SetInformationJobObject(
+                job_handle.0,
+                JobObjectCpuRateControlInformation,
+                job_information.cast(),
+                size_of_val_raw(job_information)
+                    .try_into()
+                    .expect("job information too large for WinAPI"),
+            )
+        });
+        if let Err(error) = &result {
             return if raw_os_error(error) == Some(ERROR_INVALID_PARAMETER) {
                 self.inner.kill()
             } else {

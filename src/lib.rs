@@ -103,7 +103,6 @@ mod control;
 #[cfg_attr(unix, path = "unix/mod.rs")]
 #[cfg_attr(windows, path = "windows/mod.rs")]
 mod imp;
-
 macro_rules! r#impl {
     ( $short_name:ident , $long_cfg:expr , ) => {
         const _: () = assert!(
@@ -116,6 +115,7 @@ macro_rules! r#impl {
         );
     };
 }
+
 r#impl!(
     process_control_memory_limit,
     cfg!(any(
@@ -127,6 +127,7 @@ r#impl!(
         windows,
     )),
 );
+r#impl!(process_control_cpu_limit, cfg!(windows),);
 r#impl!(
     process_control_unix_waitid,
     cfg!(not(any(
@@ -338,6 +339,12 @@ pub trait Control: private::Sealed {
     )]
     #[must_use]
     fn memory_limit(self, limit: usize) -> Self;
+
+    /// Sets a CPU limit relative to the number of cores.
+    /// 100% is equivalent to one full core.
+    #[cfg(any(doc, process_control_cpu_limit))]
+    #[must_use]
+    fn cpu_limit(self, limit: u32) -> Self;
 
     /// Sets the total time limit for the process in milliseconds.
     ///

@@ -41,6 +41,7 @@ fn main() {
             || (targets!(OS => linux) && targets!(ENV => gnu, musl))
             || cfg_var!(CFG, windows),
     );
+    new_cfg!(cpu_limit, cfg_var!(CFG, windows),);
     new_cfg!(
         unix_waitid,
         !targets!(OS => espidf, horizon, openbsd, redox, tvos, vxworks),
