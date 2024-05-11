@@ -27,21 +27,29 @@ macro_rules! targets {
 }
 
 macro_rules! new_cfg {
-    ( $name:ident , $condition:expr , ) => {{
+    ( $name:expr , $condition:expr ) => {{
+        println!("cargo:rustc-check-cfg=cfg({})", $name);
         if $condition {
-            println!("cargo:rustc-cfg=process_control_{}", stringify!($name));
+            println!("cargo:rustc-cfg={}", $name);
         }
     }};
 }
 
+macro_rules! new_crate_cfg {
+    ( $name:ident , $condition:expr $(,)? ) => {
+        new_cfg!(concat!("process_control_", stringify!($name)), $condition)
+    };
+}
+
 fn main() {
-    new_cfg!(
+    new_crate_cfg!(docs_rs, false);
+    new_crate_cfg!(
         memory_limit,
         targets!(OS => android)
             || (targets!(OS => linux) && targets!(ENV => gnu, musl))
             || cfg_var!(CFG, windows),
     );
-    new_cfg!(
+    new_crate_cfg!(
         unix_waitid,
         !targets!(OS => espidf, horizon, openbsd, redox, tvos, vxworks),
     );
