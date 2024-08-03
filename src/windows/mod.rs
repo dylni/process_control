@@ -71,7 +71,7 @@ struct RawHandle(HANDLE);
 
 impl RawHandle {
     fn new(process: &Child) -> Self {
-        Self(process.as_raw_handle() as _)
+        Self(process.as_raw_handle())
     }
 }
 
@@ -83,7 +83,7 @@ impl JobHandle {
         assert_matches!(&self.0, None);
 
         let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null_mut()) };
-        if handle == 0 {
+        if handle.is_null() {
             return Err(io::Error::last_os_error());
         }
 
