@@ -1,4 +1,7 @@
+use std::io;
 use std::marker::PhantomData;
+pub(super) use std::os::fd::OwnedFd;
+use std::os::raw::c_int;
 use std::process::Child;
 use std::time::Duration;
 
@@ -18,6 +21,9 @@ macro_rules! if_waitid {
 
 mod exit_status;
 pub(super) use exit_status::ExitStatus;
+
+mod read;
+pub(super) use read::read2;
 
 mod wait;
 
@@ -47,9 +53,6 @@ macro_rules! if_raw_pid {
 }
 
 if_raw_pid! {
-    use std::io;
-    use std::os::raw::c_int;
-
     use libc::pid_t;
 }
 
@@ -75,15 +78,15 @@ type LimitResource = c_int;
 #[cfg(all(target_env = "gnu", target_os = "linux"))]
 type LimitResource = __rlimit_resource_t;
 
-if_raw_pid! {
-    fn check_syscall(result: c_int) -> io::Result<()> {
-        if result >= 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+fn check_syscall(result: c_int) -> io::Result<()> {
+    if result >= 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
     }
+}
 
+if_raw_pid! {
     #[derive(Debug)]
     struct RawPid(pid_t);
 

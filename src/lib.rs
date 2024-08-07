@@ -308,6 +308,59 @@ impl From<Output> for ExitStatus {
     }
 }
 
+/// A function to be called for reads from a specific process pipe ([stdout] or
+/// [stderr]).
+///
+/// When additional bytes are read from the pipe, they are passed to this
+/// function, which determines whether to include them in [`Output`]. The
+/// number of bytes is not guaranteed to be consistent and may not match the
+/// number written at any time by the command on the other side of the stream.
+///
+/// If this function returns `Ok(false)`, the passed output will be discarded
+/// and not included in [`Output`]. Errors will be propagated to
+/// [`Control::wait`]. For any more complex cases, where only slices of bytes
+/// should be included in some cases, this function can always return `false`
+/// and maintain the output buffer itself.
+///
+/// # Examples
+///
+/// ```
+/// use std::io;
+/// use std::io::Write;
+/// use std::process::Command;
+/// use std::process::Stdio;
+///
+/// use process_control::ChildExt;
+/// use process_control::Control;
+///
+/// let message = "foobar";
+/// let output = Command::new("echo")
+///     .arg(message)
+///     .stdout(Stdio::piped())
+///     .spawn()?
+///     .controlled_with_output()
+///     // Stream output while collecting it.
+///     .stdout_filter(|x| io::stdout().write_all(x).map(|()| true))
+///     .wait()?
+///     .expect("process timed out");
+/// assert!(output.status.success());
+/// assert_eq!(message.as_bytes(), &output.stdout[..message.len()]);
+/// #
+/// # Ok::<_, io::Error>(())
+/// ```
+///
+/// [stderr]: Control::stderr_filter
+/// [stdout]: Control::stdout_filter
+pub trait PipeFilter:
+    'static + FnMut(&[u8]) -> io::Result<bool> + Send
+{
+}
+
+impl<T> PipeFilter for T where
+    T: 'static + FnMut(&[u8]) -> io::Result<bool> + Send
+{
+}
+
 /// A temporary wrapper for process limits.
 #[must_use]
 pub trait Control: private::Sealed {
@@ -364,6 +417,40 @@ pub trait Control: private::Sealed {
     /// never be a scenario that causes an unintended process to be terminated.
     #[must_use]
     fn terminate_for_timeout(self) -> Self;
+
+    /// Calls a filter function for each write to [stdout].
+    ///
+    /// For more information, see [`PipeFilter`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`Command::stdout`] has not been set to [`Stdio::piped`].
+    ///
+    /// [`Command::stdout`]: ::std::process::Command::stdout
+    /// [`Stdio::piped`]: ::std::process::Stdio::piped
+    /// [stdout]: Output::stdout
+    #[must_use]
+    fn stdout_filter<T>(self, listener: T) -> Self
+    where
+        Self: Control<Result = Output>,
+        T: PipeFilter;
+
+    /// Calls a filter function for each write to [stderr].
+    ///
+    /// For more information, see [`PipeFilter`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`Command::stderr`] has not been set to [`Stdio::piped`].
+    ///
+    /// [`Command::stderr`]: ::std::process::Command::stderr
+    /// [`Stdio::piped`]: ::std::process::Stdio::piped
+    /// [stderr]: Output::stderr
+    #[must_use]
+    fn stderr_filter<T>(self, listener: T) -> Self
+    where
+        Self: Control<Result = Output>,
+        T: PipeFilter;
 
     /// Runs the process to completion, aborting if it exceeds the time limit.
     ///
@@ -459,12 +546,16 @@ pub trait ChildExt<'a>: private::Sealed {
     /// ```
     /// # use std::io;
     /// use std::process::Command;
+    /// use std::process::Stdio;
     /// use std::time::Duration;
     ///
     /// use process_control::ChildExt;
     /// use process_control::Control;
     ///
+    /// let message = "foobar";
     /// let output = Command::new("echo")
+    ///     .arg(message)
+    ///     .stdout(Stdio::piped())
     ///     .spawn()?
     ///     .controlled_with_output()
     ///     .time_limit(Duration::from_secs(1))
@@ -472,6 +563,7 @@ pub trait ChildExt<'a>: private::Sealed {
     ///     .wait()?
     ///     .expect("process timed out");
     /// assert!(output.status.success());
+    /// assert_eq!(message.as_bytes(), &output.stdout[..message.len()]);
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```

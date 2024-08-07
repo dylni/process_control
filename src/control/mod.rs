@@ -1,51 +1,25 @@
-use std::io;
-use std::io::Read;
 use std::panic;
 use std::process::Child;
 use std::thread;
-use std::thread::JoinHandle;
 use std::time::Duration;
 
 use super::imp;
 use super::Control;
 use super::ExitStatus;
 use super::Output;
+use super::PipeFilter;
 use super::WaitResult;
 
-fn read_to_end<R>(mut reader: R) -> io::Result<Vec<u8>>
-where
-    R: Read,
-{
-    let mut output = Vec::new();
-    let _ = reader.read_to_end(&mut output)?;
-    Ok(output)
-}
+mod pipe;
+pub(super) use pipe::Pipe;
 
-struct Reader(Option<JoinHandle<io::Result<Vec<u8>>>>);
-
-impl Reader {
-    fn spawn<R>(source: Option<R>) -> io::Result<Self>
-    where
-        R: 'static + Read + Send,
-    {
-        source
-            .map(|x| thread::Builder::new().spawn(move || read_to_end(x)))
-            .transpose()
-            .map(Self)
-    }
-
-    fn join(self) -> io::Result<Vec<u8>> {
-        self.0
-            .map(|x| x.join().unwrap_or_else(|x| panic::resume_unwind(x)))
-            .unwrap_or_else(|| Ok(Vec::new()))
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct Limits {
+#[derive(Debug)]
+struct Options {
     #[cfg(process_control_memory_limit)]
-    memory: Option<usize>,
-    time: Option<Duration>,
+    memory_limit: Option<usize>,
+    time_limit: Option<Duration>,
+    stdout_filter: Option<pipe::FilterWrapper>,
+    stderr_filter: Option<pipe::FilterWrapper>,
 }
 
 pub trait Process {
@@ -54,7 +28,7 @@ pub trait Process {
     fn get(&mut self) -> &mut Child;
 
     #[allow(private_interfaces)]
-    fn run_wait(&mut self, limits: Limits) -> WaitResult<Self::Result>;
+    fn run_wait(&mut self, options: Options) -> WaitResult<Self::Result>;
 }
 
 impl Process for &mut Child {
@@ -65,7 +39,7 @@ impl Process for &mut Child {
     }
 
     #[allow(private_interfaces)]
-    fn run_wait(&mut self, limits: Limits) -> WaitResult<Self::Result> {
+    fn run_wait(&mut self, options: Options) -> WaitResult<Self::Result> {
         let result = self.try_wait();
         if let Ok(Some(exit_status)) = result {
             return Ok(Some(exit_status.into()));
@@ -73,10 +47,10 @@ impl Process for &mut Child {
 
         let mut handle = imp::Process::new(self);
         #[cfg(process_control_memory_limit)]
-        if let Some(memory_limit) = limits.memory {
+        if let Some(memory_limit) = options.memory_limit {
             handle.set_memory_limit(memory_limit)?;
         }
-        handle.wait(limits.time).map(|x| x.map(ExitStatus))
+        handle.wait(options.time_limit).map(|x| x.map(ExitStatus))
     }
 }
 
@@ -88,24 +62,30 @@ impl Process for Child {
     }
 
     #[allow(private_interfaces)]
-    fn run_wait(&mut self, limits: Limits) -> WaitResult<Self::Result> {
-        macro_rules! reader {
-            ( $stream:ident ) => {
-                Reader::spawn(self.$stream.take())
-            };
+    fn run_wait(&mut self, mut options: Options) -> WaitResult<Self::Result> {
+        macro_rules! pipe {
+            ( $pipe:ident , $filter:ident ) => {{
+                let filter = options.$filter.take();
+                self.$pipe.take().map(|x| Pipe::new(x.into(), filter))
+            }};
         }
 
-        let stdout_reader = reader!(stdout)?;
-        let stderr_reader = reader!(stderr)?;
+        let pipes =
+            [pipe!(stdout, stdout_filter), pipe!(stderr, stderr_filter)];
+        let reader =
+            thread::Builder::new().spawn(move || imp::read2(pipes))?;
 
         (&mut &mut *self)
-            .run_wait(limits)?
+            .run_wait(options)?
             .map(|status| {
-                Ok(Output {
-                    status,
-                    stdout: stdout_reader.join()?,
-                    stderr: stderr_reader.join()?,
-                })
+                reader
+                    .join()
+                    .unwrap_or_else(|x| panic::resume_unwind(x))
+                    .map(|[stdout, stderr]| Output {
+                        status,
+                        stdout,
+                        stderr,
+                    })
             })
             .transpose()
     }
@@ -117,7 +97,7 @@ where
     P: Process,
 {
     process: P,
-    limits: Limits,
+    options: Options,
     strict_errors: bool,
     terminate_for_timeout: bool,
 }
@@ -129,10 +109,12 @@ where
     pub(super) const fn new(process: P) -> Self {
         Self {
             process,
-            limits: Limits {
+            options: Options {
                 #[cfg(process_control_memory_limit)]
-                memory: None,
-                time: None,
+                memory_limit: None,
+                time_limit: None,
+                stdout_filter: None,
+                stderr_filter: None,
             },
             strict_errors: false,
             terminate_for_timeout: false,
@@ -149,13 +131,13 @@ where
     #[cfg(any(doc, process_control_memory_limit))]
     #[inline]
     fn memory_limit(mut self, limit: usize) -> Self {
-        self.limits.memory = Some(limit);
+        self.options.memory_limit = Some(limit);
         self
     }
 
     #[inline]
     fn time_limit(mut self, limit: Duration) -> Self {
-        self.limits.time = Some(limit);
+        self.options.time_limit = Some(limit);
         self
     }
 
@@ -172,9 +154,33 @@ where
     }
 
     #[inline]
+    fn stdout_filter<T>(mut self, filter: T) -> Self
+    where
+        Self: Control<Result = Output>,
+        T: PipeFilter,
+    {
+        assert!(self.process.get().stdout.is_some(), "stdout is not piped");
+
+        self.options.stdout_filter = Some(filter.into());
+        self
+    }
+
+    #[inline]
+    fn stderr_filter<T>(mut self, filter: T) -> Self
+    where
+        Self: Control<Result = Output>,
+        T: PipeFilter,
+    {
+        assert!(self.process.get().stderr.is_some(), "stderr is not piped");
+
+        self.options.stderr_filter = Some(filter.into());
+        self
+    }
+
+    #[inline]
     fn wait(mut self) -> WaitResult<Self::Result> {
         let _ = self.process.get().stdin.take();
-        let mut result = self.process.run_wait(self.limits);
+        let mut result = self.process.run_wait(self.options);
 
         macro_rules! run_if_ok {
             ( $get_result_fn:expr ) => {

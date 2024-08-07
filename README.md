@@ -50,6 +50,19 @@ Unless you explicitly state otherwise, any contribution submitted for inclusion
 in this crate, as defined in [LICENSE-APACHE], shall be licensed according to
 [COPYRIGHT], without any additional terms or conditions.
 
+### Third-party content
+
+This crate includes copies and modifications of content developed by third
+parties:
+
+- [src/unix/read.rs] and [src/windows/read.rs] contain modifications of code
+  from The Rust Programming Language, licensed under the MIT License or the
+  Apache License, Version 2.0.
+
+See those files for more details.
+
+Copies of third-party licenses can be found in [LICENSE-THIRD-PARTY].
+
 [`Child`]: https://doc.rust-lang.org/std/process/struct.Child.html
 [`ChildExt`]: https://docs.rs/process_control/*/process_control/trait.ChildExt.html
 [COPYRIGHT]: https://github.com/dylni/process_control/blob/master/COPYRIGHT

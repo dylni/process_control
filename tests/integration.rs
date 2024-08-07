@@ -1,6 +1,9 @@
 use std::io;
+use std::panic;
 use std::process::Command;
 use std::process::Stdio;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread;
 
 use process_control::ChildExt;
@@ -38,6 +41,15 @@ fn test_large_output() -> io::Result<()> {
         assert!(output.into_iter().all(|x| x == byte));
     }
 
+    #[track_caller]
+    fn test_stream_output(stream: &[(bool, Vec<u8>)], byte: u8) {
+        let mut buffer = Vec::new();
+        for (_, output) in stream {
+            buffer.extend(output);
+        }
+        test_output(buffer, byte);
+    }
+
     let process = Command::new("perl")
         .arg("-e")
         .arg(
@@ -53,10 +65,20 @@ fn test_large_output() -> io::Result<()> {
         .stderr(Stdio::piped())
         .spawn()?;
 
+    let streams = Arc::new(Mutex::new(Vec::new()));
+    let create_filter_fn = |stderr| {
+        let streams = Arc::clone(&streams);
+        move |buffer: &[_]| {
+            streams.lock().unwrap().push((stderr, buffer.to_owned()));
+            Ok(true)
+        }
+    };
     let output = process
         .controlled_with_output()
         .time_limit(LONG_TIME_LIMIT)
         .strict_errors()
+        .stdout_filter(create_filter_fn(false))
+        .stderr_filter(create_filter_fn(true))
         .wait()?
         .expect("process timed out");
 
@@ -64,6 +86,23 @@ fn test_large_output() -> io::Result<()> {
 
     test_output(output.stdout, b'a');
     test_output(output.stderr, b'b');
+
+    let mut streams = streams.lock().unwrap();
+    let unordered_streams = streams.clone();
+    streams.sort();
+    assert_ne!(*streams, unordered_streams);
+    assert!(unordered_streams.iter().rev().ne(&*streams));
+
+    let (stdout, stderr) = streams
+        .iter()
+        .position(|(x, _)| x == &true)
+        .map(|x| streams.split_at(x))
+        .expect("missing stderr");
+    assert!(stdout.len() >= 2);
+    assert!(stderr.len() >= 2);
+
+    test_stream_output(stdout, b'a');
+    test_stream_output(stderr, b'b');
 
     Ok(())
 }

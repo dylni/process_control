@@ -3,6 +3,7 @@ use std::iter::FusedIterator;
 use std::mem;
 use std::num::NonZeroU32;
 use std::os::windows::io::AsRawHandle;
+use std::os::windows::io::OwnedHandle;
 use std::process::Child;
 use std::ptr;
 use std::time::Duration;
@@ -31,6 +32,9 @@ use super::WaitResult;
 mod exit_status;
 pub(super) use exit_status::ExitStatus;
 
+mod read;
+pub(super) use read::read2;
+
 macro_rules! assert_matches {
     ( $result:expr , $expected_result:pat ) => {{
         let result = $result;
@@ -46,6 +50,8 @@ macro_rules! assert_matches {
         }
     }};
 }
+
+pub(super) type OwnedFd = OwnedHandle;
 
 const EXIT_SUCCESS: u32 = 0;
 const TRUE: BOOL = 1;
