@@ -50,7 +50,17 @@ impl Process for &mut Child {
         if let Some(memory_limit) = options.memory_limit {
             handle.set_memory_limit(memory_limit)?;
         }
-        handle.wait(options.time_limit).map(|x| x.map(ExitStatus))
+        let result = handle.wait(options.time_limit)?;
+        result
+            .map(|result| {
+                self.try_wait().map(|std_result| {
+                    ExitStatus::new(
+                        result,
+                        std_result.expect("missing exit status"),
+                    )
+                })
+            })
+            .transpose()
     }
 }
 
@@ -182,27 +192,17 @@ where
         let _ = self.process.get().stdin.take();
         let mut result = self.process.run_wait(self.options);
 
-        macro_rules! run_if_ok {
-            ( $get_result_fn:expr ) => {
-                if result.is_ok() {
-                    #[allow(clippy::redundant_closure_call)]
-                    if let Err(error) = $get_result_fn() {
-                        result = Err(error);
-                    }
-                }
-            };
-        }
-
         let process = self.process.get();
         // If the process exited normally, identifier reuse might cause a
         // different process to be terminated.
         if self.terminate_for_timeout && !matches!(result, Ok(Some(_))) {
             let next_result = process.kill().and_then(|()| process.wait());
-            if self.strict_errors {
-                run_if_ok!(|| next_result);
+            if self.strict_errors && result.is_ok() {
+                if let Err(error) = next_result {
+                    result = Err(error);
+                }
             }
         }
-        run_if_ok!(|| process.try_wait());
 
         result
     }

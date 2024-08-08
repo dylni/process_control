@@ -65,9 +65,16 @@ impl __Test {
     where
         F: FnMut() -> io::Result<Result<ExitStatus, Handle>>,
     {
-        let exit_code = wait_fn()
-            .expect("failed to run process")
-            .map(ExitStatus::code);
+        let exit_code =
+            wait_fn()
+                .expect("failed to run process")
+                .map(|exit_status| {
+                    assert_eq!(
+                        exit_status.code(),
+                        exit_status.into_std_lossy().code().map(Into::into),
+                    );
+                    exit_status.code()
+                });
         assert!((self.is_expected_fn)(exit_code.as_ref().ok().copied()));
 
         if self.running {

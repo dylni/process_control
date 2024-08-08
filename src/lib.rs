@@ -157,7 +157,7 @@ macro_rules! unix_method {
         #[inline]
         #[must_use]
         pub fn $method(&self) -> $return_type {
-            self.0.$method()
+            self.inner.$method()
         }
     };
 }
@@ -165,14 +165,22 @@ macro_rules! unix_method {
 /// Equivalent to [`process::ExitStatus`] but allows for greater accuracy.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[must_use]
-pub struct ExitStatus(imp::ExitStatus);
+pub struct ExitStatus {
+    inner: imp::ExitStatus,
+    std: process::ExitStatus,
+}
 
 impl ExitStatus {
+    fn new(inner: imp::ExitStatus, std: process::ExitStatus) -> Self {
+        debug_assert_eq!(inner, std.into());
+        Self { inner, std }
+    }
+
     /// Equivalent to [`process::ExitStatus::success`].
     #[inline]
     #[must_use]
     pub fn success(self) -> bool {
-        self.0.success()
+        self.inner.success()
     }
 
     /// Equivalent to [`process::ExitStatus::code`], but a more accurate value
@@ -180,13 +188,49 @@ impl ExitStatus {
     #[inline]
     #[must_use]
     pub fn code(self) -> Option<i64> {
-        self.0.code().map(Into::into)
+        self.inner.code().map(Into::into)
     }
 
     unix_method!(continued, bool);
     unix_method!(core_dumped, bool);
     unix_method!(signal, Option<c_int>);
     unix_method!(stopped_signal, Option<c_int>);
+
+    /// Converts this structure to a corresponding [`process::ExitStatus`]
+    /// instance.
+    ///
+    /// Since this type can represent more exit codes, it will attempt to
+    /// provide an equivalent representation using the standard library type.
+    /// However, if converted back to this structure, detailed information may
+    /// have been lost.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::io;
+    /// use std::process::Command;
+    /// use std::time::Duration;
+    ///
+    /// use process_control::ChildExt;
+    /// use process_control::Control;
+    ///
+    /// let exit_status = Command::new("echo")
+    ///     .spawn()?
+    ///     .controlled()
+    ///     .time_limit(Duration::from_secs(1))
+    ///     .terminate_for_timeout()
+    ///     .wait()?
+    ///     .expect("process timed out");
+    /// assert!(exit_status.success());
+    /// assert!(exit_status.into_std_lossy().success());
+    /// #
+    /// # Ok::<_, io::Error>(())
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn into_std_lossy(self) -> process::ExitStatus {
+        self.std
+    }
 }
 
 impl AsMut<Self> for ExitStatus {
@@ -206,14 +250,14 @@ impl AsRef<Self> for ExitStatus {
 impl Display for ExitStatus {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.0, f)
+        Display::fmt(&self.inner, f)
     }
 }
 
 impl From<process::ExitStatus> for ExitStatus {
     #[inline]
     fn from(value: process::ExitStatus) -> Self {
-        Self(value.into())
+        Self::new(value.into(), value)
     }
 }
 
@@ -230,6 +274,53 @@ pub struct Output {
 
     /// Equivalent to [`process::Output::stderr`].
     pub stderr: Vec<u8>,
+}
+
+impl Output {
+    /// Converts this structure to the best equivalent [`process::Output`]
+    /// instance.
+    ///
+    /// For more information, see [`ExitStatus`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::io;
+    /// use std::process::Command;
+    /// use std::process::Stdio;
+    /// use std::time::Duration;
+    ///
+    /// use process_control::ChildExt;
+    /// use process_control::Control;
+    ///
+    /// let message = "foobar";
+    /// let output = Command::new("echo")
+    ///     .arg(message)
+    ///     .stdout(Stdio::piped())
+    ///     .spawn()?
+    ///     .controlled_with_output()
+    ///     .time_limit(Duration::from_secs(1))
+    ///     .terminate_for_timeout()
+    ///     .wait()?
+    ///     .expect("process timed out");
+    /// assert!(output.status.success());
+    /// assert_eq!(message.as_bytes(), &output.stdout[..message.len()]);
+    ///
+    /// let output = output.into_std_lossy();
+    /// assert!(output.status.success());
+    /// assert_eq!(message.as_bytes(), &output.stdout[..message.len()]);
+    /// #
+    /// # Ok::<_, io::Error>(())
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn into_std_lossy(self) -> process::Output {
+        process::Output {
+            status: self.status.into_std_lossy(),
+            stdout: self.stdout,
+            stderr: self.stderr,
+        }
+    }
 }
 
 impl AsMut<ExitStatus> for Output {
