@@ -12,7 +12,7 @@
 //!   <https://thanks.rust-lang.org>
 //!
 //!   <https://github.com/rust-lang/rust/blob/835ed0021e149cacb2d464cdbc35816b5d551c0e/COPYRIGHT>
-//! - Modifications copyright (c) 2023 dylni (<https://github.com/dylni>)<br>
+//! - Modifications copyright (c) 2024 dylni (<https://github.com/dylni>)<br>
 //!   <https://github.com/dylni/normpath/blob/master/COPYRIGHT>
 
 use std::io;

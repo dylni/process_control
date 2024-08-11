@@ -23,7 +23,7 @@ struct Options {
 }
 
 pub trait Process {
-    type Result;
+    type Result: AsRef<ExitStatus>;
 
     fn get(&mut self) -> &mut Child;
 

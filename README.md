@@ -68,5 +68,6 @@ Copies of third-party licenses can be found in [LICENSE-THIRD-PARTY].
 [COPYRIGHT]: https://github.com/dylni/process_control/blob/master/COPYRIGHT
 [documentation]: https://docs.rs/process_control
 [LICENSE-APACHE]: https://github.com/dylni/process_control/blob/master/LICENSE-APACHE
+[LICENSE-THIRD-PARTY]: https://github.com/dylni/process_control/blob/master/LICENSE-THIRD-PARTY
 [src/unix/read.rs]: https://github.com/dylni/process_control/blob/master/src/unix/read.rs
 [src/windows/read.rs]: https://github.com/dylni/process_control/blob/master/src/windows/read.rs
