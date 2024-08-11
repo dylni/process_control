@@ -576,11 +576,13 @@ pub trait ChildExt<'a>: private::Sealed {
     /// The type returned by [`controlled`].
     ///
     /// [`controlled`]: Self::controlled
+    #[deprecated(since = "4.2.1")]
     type ExitStatusControl: 'a + Control<Result = ExitStatus> + Debug;
 
     /// The type returned by [`controlled_with_output`].
     ///
     /// [`controlled_with_output`]: Self::controlled_with_output
+    #[deprecated(since = "4.2.1")]
     type OutputControl: Control<Result = Output> + Debug;
 
     /// Equivalent to [`Child::kill`] but ignores errors when the process is no
@@ -623,6 +625,7 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
+    #[allow(deprecated)]
     #[must_use]
     fn controlled(&'a mut self) -> Self::ExitStatusControl;
 
@@ -658,6 +661,7 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
+    #[allow(deprecated)]
     #[must_use]
     fn controlled_with_output(self) -> Self::OutputControl;
 }
@@ -672,11 +676,13 @@ impl<'a> ChildExt<'a> for Child {
         self.kill()
     }
 
+    #[allow(deprecated)]
     #[inline]
     fn controlled(&'a mut self) -> Self::ExitStatusControl {
         Self::ExitStatusControl::new(self)
     }
 
+    #[allow(deprecated)]
     #[inline]
     fn controlled_with_output(self) -> Self::OutputControl {
         Self::OutputControl::new(self)
