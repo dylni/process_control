@@ -126,7 +126,7 @@ impl Pipe {
     }
 
     fn cancel_io(&self) -> io::Result<()> {
-        unsafe { super::check_syscall(CancelIo(self.raw())).map(drop) }
+        super::check_syscall(unsafe { CancelIo(self.raw()) }).map(drop)
     }
 }
 

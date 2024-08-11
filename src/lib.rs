@@ -277,10 +277,10 @@ pub struct Output {
 }
 
 impl Output {
-    /// Converts this structure to the best equivalent [`process::Output`]
+    /// Converts this structure to a corresponding [`process::Output`]
     /// instance.
     ///
-    /// For more information, see [`ExitStatus`].
+    /// For more information, see [`ExitStatus::into_std_lossy`].
     ///
     /// # Examples
     ///
@@ -409,9 +409,9 @@ impl From<Output> for ExitStatus {
 ///
 /// If this function returns `Ok(false)`, the passed output will be discarded
 /// and not included in [`Output`]. Errors will be propagated to
-/// [`Control::wait`]. For any more complex cases, where only slices of bytes
-/// should be included in some cases, this function can always return `false`
-/// and maintain the output buffer itself.
+/// [`Control::wait`]. For more complex cases, where specific portions of read
+/// bytes should be included, this function can return `false` and maintain the
+/// output buffer itself.
 ///
 /// # Examples
 ///
