@@ -572,19 +572,7 @@ pub trait Control: private::Sealed {
 /// For more information, see [the module-level documentation][module].
 ///
 /// [module]: self
-pub trait ChildExt<'a>: private::Sealed {
-    /// The type returned by [`controlled`].
-    ///
-    /// [`controlled`]: Self::controlled
-    #[deprecated(since = "4.2.1")]
-    type ExitStatusControl: 'a + Control<Result = ExitStatus> + Debug;
-
-    /// The type returned by [`controlled_with_output`].
-    ///
-    /// [`controlled_with_output`]: Self::controlled_with_output
-    #[deprecated(since = "4.2.1")]
-    type OutputControl: Control<Result = Output> + Debug;
-
+pub trait ChildExt: private::Sealed {
     /// Equivalent to [`Child::kill`] but ignores errors when the process is no
     /// longer running.
     ///
@@ -625,9 +613,8 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
-    #[allow(deprecated)]
     #[must_use]
-    fn controlled(&'a mut self) -> Self::ExitStatusControl;
+    fn controlled(&mut self) -> impl Control<Result = ExitStatus> + Debug;
 
     /// Creates an instance of [`Control`] that yields [`Output`] for this
     /// process.
@@ -661,31 +648,24 @@ pub trait ChildExt<'a>: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
-    #[allow(deprecated)]
     #[must_use]
-    fn controlled_with_output(self) -> Self::OutputControl;
+    fn controlled_with_output(self) -> impl Control<Result = Output> + Debug;
 }
 
-impl<'a> ChildExt<'a> for Child {
-    type ExitStatusControl = control::Buffer<&'a mut Self>;
-
-    type OutputControl = control::Buffer<Self>;
-
+impl ChildExt for Child {
     #[inline]
     fn terminate_if_running(&mut self) -> io::Result<()> {
         self.kill()
     }
 
-    #[allow(deprecated)]
     #[inline]
-    fn controlled(&'a mut self) -> Self::ExitStatusControl {
-        Self::ExitStatusControl::new(self)
+    fn controlled(&mut self) -> impl Control<Result = ExitStatus> + Debug {
+        control::Buffer::new(self)
     }
 
-    #[allow(deprecated)]
     #[inline]
-    fn controlled_with_output(self) -> Self::OutputControl {
-        Self::OutputControl::new(self)
+    fn controlled_with_output(self) -> impl Control<Result = Output> + Debug {
+        control::Buffer::new(self)
     }
 }
 

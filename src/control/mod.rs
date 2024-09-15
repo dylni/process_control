@@ -22,7 +22,7 @@ struct Options {
     stderr_filter: Option<pipe::FilterWrapper>,
 }
 
-pub trait Process {
+pub(super) trait Process {
     type Result: AsRef<ExitStatus>;
 
     fn get(&mut self) -> &mut Child;
@@ -102,7 +102,7 @@ impl Process for Child {
 }
 
 #[derive(Debug)]
-pub struct Buffer<P>
+pub(super) struct Buffer<P>
 where
     P: Process,
 {
