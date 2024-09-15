@@ -573,19 +573,6 @@ pub trait Control: private::Sealed {
 ///
 /// [module]: self
 pub trait ChildExt: private::Sealed {
-    /// Equivalent to [`Child::kill`] but ignores errors when the process is no
-    /// longer running.
-    ///
-    /// Windows and Unix errors are inconsistent when terminating processes.
-    /// This method unifies them by simulating Unix behavior on Windows.
-    ///
-    /// *This method is no longer necessary, as the standard library has been
-    /// [updated] to perform the same unification.*
-    ///
-    /// [updated]: https://github.com/rust-lang/rust/pull/112594
-    #[deprecated(since = "4.1.0", note = "use `Child::kill` instead")]
-    fn terminate_if_running(&mut self) -> io::Result<()>;
-
     /// Creates an instance of [`Control`] that yields [`ExitStatus`] for this
     /// process.
     ///
@@ -653,11 +640,6 @@ pub trait ChildExt: private::Sealed {
 }
 
 impl ChildExt for Child {
-    #[inline]
-    fn terminate_if_running(&mut self) -> io::Result<()> {
-        self.kill()
-    }
-
     #[inline]
     fn controlled(&mut self) -> impl Control<Result = ExitStatus> + Debug {
         control::Buffer::new(self)

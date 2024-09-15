@@ -1,10 +1,8 @@
 use std::io;
-use std::panic;
 use std::process::Command;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::thread;
 
 use process_control::ChildExt;
 use process_control::Control;
@@ -13,7 +11,6 @@ use process_control::Control;
 mod common;
 use common::Limit;
 use common::LONG_TIME_LIMIT;
-use common::SHORT_TIME_LIMIT;
 
 #[test]
 fn test_stdin() {
@@ -103,36 +100,6 @@ fn test_large_output() -> io::Result<()> {
 
     test_stream_output(stdout, b'a');
     test_stream_output(stderr, b'b');
-
-    Ok(())
-}
-
-#[allow(deprecated)]
-#[test]
-fn test_terminate_if_running() -> io::Result<()> {
-    let mut process =
-        common::create_time_limit_command(LONG_TIME_LIMIT).spawn()?;
-
-    process.terminate_if_running()?;
-    process.terminate_if_running()?;
-
-    thread::sleep(SHORT_TIME_LIMIT);
-
-    process.terminate_if_running()?;
-
-    #[cfg_attr(windows, allow(dead_code))]
-    fn check_result(result: &io::Result<()>) {
-        assert_matches!(result, Ok(()));
-    }
-    {
-        // https://github.com/rust-lang/rust/pull/112594
-        #[cfg(windows)]
-        #[rustversion::before(1.72.0)]
-        fn check_result(result: &io::Result<()>) {
-            assert!(result.is_err());
-        }
-        check_result(&process.kill());
-    }
 
     Ok(())
 }
