@@ -71,11 +71,11 @@ impl<'a> AsyncPipe<'a> {
                 } else {
                     Err(error)
                 }
-            });
-        if result.is_ok() && self.buffer.len() != index {
+            })?;
+        if self.buffer.len() != index {
             self.inner.run_filter(self.buffer, index)?;
         }
-        result
+        Ok(result)
     }
 }
 

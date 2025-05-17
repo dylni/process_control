@@ -99,20 +99,24 @@ impl DerefMut for Event {
     }
 }
 
+#[inline(always)]
+const fn u32_to_usize(n: u32) -> usize {
+    // This assertion should never fail.
+    static_assert!(mem::size_of::<u32>() <= mem::size_of::<usize>());
+    n as usize
+}
+
 impl Pipe {
     fn raw(&self) -> HANDLE {
         self.inner.as_raw_handle()
     }
 
     fn overlapped_result(&self, event: &Event) -> io::Result<usize> {
-        // This assertion should never fail.
-        static_assert!(mem::size_of::<u32>() <= mem::size_of::<usize>());
-
-        let mut read_length: u32 = 0;
+        let mut read_length = 0;
         super::check_syscall(unsafe {
             GetOverlappedResult(self.raw(), &**event, &mut read_length, TRUE)
         })
-        .map(|()| read_length as usize)
+        .map(|()| u32_to_usize(read_length))
         .or_else(|error| {
             if matches!(
                 super::raw_os_error(&error),
@@ -176,11 +180,9 @@ impl<'a> AsyncPipe<'a> {
 
     fn read_overlapped(&mut self) -> io::Result<Option<usize>> {
         debug_assert!(!self.reading);
-        // This assertion should never fail.
-        static_assert!(mem::size_of::<u32>() <= mem::size_of::<usize>());
 
         let buffer = self.buffer.spare_capacity_mut();
-        let max_length = buffer.len().min(u32::MAX as usize) as u32;
+        let max_length = buffer.len().try_into().unwrap_or(u32::MAX);
         let mut length = 0;
         super::check_syscall(unsafe {
             ReadFile(
@@ -191,7 +193,7 @@ impl<'a> AsyncPipe<'a> {
                 &mut **self.event,
             )
         })
-        .map(|()| Some(length as usize))
+        .map(|()| Some(u32_to_usize(length)))
         .or_else(|error| match super::raw_os_error(&error) {
             Some(ERROR_IO_PENDING) => Ok(None),
             Some(ERROR_BROKEN_PIPE) => Ok(Some(0)),
