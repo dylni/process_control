@@ -17,6 +17,7 @@ if_waitid! {
     use libc::CLD_TRAPPED;
 }
 
+#[attr_alias::eval]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExitStatusKind {
     Continued,
@@ -24,23 +25,23 @@ enum ExitStatusKind {
     Exited,
     Killed,
     Stopped,
-    #[cfg(process_control_unix_waitid)]
+    #[attr_alias(unix_waitid)]
     Trapped,
     Uncategorized,
 }
 
+#[attr_alias::eval]
 impl ExitStatusKind {
-    if_waitid! {
-        const fn new(raw: c_int) -> Self {
-            match raw {
-                CLD_CONTINUED => Self::Continued,
-                CLD_DUMPED => Self::Dumped,
-                CLD_EXITED => Self::Exited,
-                CLD_KILLED => Self::Killed,
-                CLD_STOPPED => Self::Stopped,
-                CLD_TRAPPED => Self::Trapped,
-                _ => Self::Uncategorized,
-            }
+    #[attr_alias(unix_waitid)]
+    const fn new(raw: c_int) -> Self {
+        match raw {
+            CLD_CONTINUED => Self::Continued,
+            CLD_DUMPED => Self::Dumped,
+            CLD_EXITED => Self::Exited,
+            CLD_KILLED => Self::Killed,
+            CLD_STOPPED => Self::Stopped,
+            CLD_TRAPPED => Self::Trapped,
+            _ => Self::Uncategorized,
         }
     }
 }
@@ -59,13 +60,13 @@ pub(crate) struct ExitStatus {
     kind: ExitStatusKind,
 }
 
+#[attr_alias::eval]
 impl ExitStatus {
-    if_waitid! {
-        pub(super) unsafe fn new(process_info: siginfo_t) -> Self {
-            Self {
-                value: unsafe { process_info.si_status() },
-                kind: ExitStatusKind::new(process_info.si_code),
-            }
+    #[attr_alias(unix_waitid)]
+    pub(super) unsafe fn new(process_info: siginfo_t) -> Self {
+        Self {
+            value: unsafe { process_info.si_status() },
+            kind: ExitStatusKind::new(process_info.si_code),
         }
     }
 
@@ -86,6 +87,7 @@ impl ExitStatus {
     code_method!(stopped_signal, ExitStatusKind::Stopped);
 }
 
+#[attr_alias::eval]
 impl Display for ExitStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.kind {
@@ -100,7 +102,7 @@ impl Display for ExitStatus {
             ExitStatusKind::Stopped => {
                 write!(f, "stopped (not terminated) by signal: {}", self.value)
             }
-            #[cfg(process_control_unix_waitid)]
+            #[attr_alias(unix_waitid)]
             ExitStatusKind::Trapped => f.write_str("trapped"),
             ExitStatusKind::Uncategorized => {
                 write!(f, "uncategorized wait status: {}", self.value)

@@ -19,6 +19,9 @@ all-features = true
 rustc-args = ["--cfg", "process_control_docs_rs"]
 rustdoc-args = ["--cfg", "process_control_docs_rs"]
 
+[dependencies]
+attr_alias = "0.1.0"
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.120"
 

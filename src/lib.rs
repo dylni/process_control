@@ -104,41 +104,6 @@ mod control;
 #[cfg_attr(windows, path = "windows/mod.rs")]
 mod imp;
 
-macro_rules! r#impl {
-    ( $short_name:ident , $long_cfg:expr , ) => {
-        const _: () = assert!(
-            cfg!($short_name) == $long_cfg,
-            concat!(
-                "The configuration option '",
-                stringify!($short_name),
-                "' is private.",
-            ),
-        );
-    };
-}
-r#impl!(
-    process_control_memory_limit,
-    cfg!(any(
-        target_os = "android",
-        all(
-            target_os = "linux",
-            any(target_env = "gnu", target_env = "musl"),
-        ),
-        windows,
-    )),
-);
-r#impl!(
-    process_control_unix_waitid,
-    cfg!(not(any(
-        target_os = "espidf",
-        target_os = "horizon",
-        target_os = "openbsd",
-        target_os = "redox",
-        target_os = "tvos",
-        target_os = "vxworks",
-    ))),
-);
-
 type WaitResult<T> = io::Result<Option<T>>;
 
 #[rustfmt::skip]
@@ -453,6 +418,7 @@ impl<T> PipeFilter for T where
 }
 
 /// A temporary wrapper for process limits.
+#[attr_alias::eval]
 #[must_use]
 pub trait Control: private::Sealed {
     /// The type returned by [`wait`].
@@ -468,18 +434,8 @@ pub trait Control: private::Sealed {
     ///
     /// Small memory limits are safe, but they might prevent the operating
     /// system from starting the process.
-    #[cfg(any(doc, process_control_memory_limit))]
-    #[cfg_attr(
-        process_control_docs_rs,
-        doc(cfg(any(
-            target_os = "android",
-            all(
-                target_os = "linux",
-                any(target_env = "gnu", target_env = "musl"),
-            ),
-            windows,
-        )))
-    )]
+    #[attr_alias(memory_limit, cfg(any(doc, *)))]
+    #[attr_alias(memory_limit, cfg_attr(process_control_docs_rs, doc(cfg(*))))]
     #[must_use]
     fn memory_limit(self, limit: usize) -> Self;
 

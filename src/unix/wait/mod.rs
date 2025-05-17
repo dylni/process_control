@@ -21,10 +21,12 @@ macro_rules! check_result {
     }};
 }
 
-#[cfg_attr(process_control_unix_waitid, path = "waitid.rs")]
-#[cfg_attr(not(process_control_unix_waitid), path = "common.rs")]
-mod imp;
-pub(super) use imp::wait;
+attr_alias::eval_block! {
+    #[attr_alias(unix_waitid, cfg_attr(*, path = "waitid.rs"))]
+    #[attr_alias(unix_waitid, cfg_attr(not(*), path = "common.rs"))]
+    mod imp;
+    pub(super) use imp::wait;
+}
 
 fn run_with_time_limit<F, R>(
     run_fn: F,

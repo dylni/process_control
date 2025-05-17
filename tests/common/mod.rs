@@ -19,7 +19,8 @@ pub(super) const SHORT_TIME_LIMIT: Duration = Duration::from_secs(2);
 
 pub(super) const LONG_TIME_LIMIT: Duration = Duration::from_secs(5);
 
-#[cfg(process_control_memory_limit)]
+#[attr_alias::eval]
+#[attr_alias(memory_limit)]
 pub(super) const MEMORY_LIMIT: usize = 104_857_600;
 
 macro_rules! assert_matches {
@@ -47,9 +48,10 @@ impl Spawn for Command {
     }
 }
 
+#[attr_alias::eval]
 #[derive(Clone, Copy)]
 pub(super) enum Limit {
-    #[cfg(process_control_memory_limit)]
+    #[attr_alias(memory_limit)]
     Memory(usize),
     Time(Duration),
 }
@@ -60,6 +62,7 @@ pub(super) struct __Test {
     pub(super) running: bool,
 }
 
+#[attr_alias::eval]
 impl __Test {
     fn run_one<F>(self, mut wait_fn: F)
     where
@@ -118,7 +121,7 @@ impl __Test {
         T: Spawn,
     {
         match limit {
-            #[cfg(process_control_memory_limit)]
+            #[attr_alias(memory_limit)]
             Limit::Memory(limit) => {
                 options.memory_limit = limit;
                 self.run_many(&mut options);
@@ -134,18 +137,20 @@ impl __Test {
     }
 }
 
+#[attr_alias::eval]
 pub(super) struct __Options<T>
 where
     T: Spawn,
 {
     command: T,
-    #[cfg(process_control_memory_limit)]
+    #[attr_alias(memory_limit)]
     memory_limit: usize,
     strict_errors: bool,
     terminating: bool,
     time_limit: Option<Duration>,
 }
 
+#[attr_alias::eval]
 impl<T> __Options<T>
 where
     T: Spawn,
@@ -153,7 +158,7 @@ where
     pub(super) const fn new(command: T, terminating: bool) -> Self {
         Self {
             command,
-            #[cfg(process_control_memory_limit)]
+            #[attr_alias(memory_limit)]
             memory_limit: MEMORY_LIMIT,
             strict_errors: false,
             terminating,
@@ -166,7 +171,7 @@ where
         C: Control,
         C::Result: Into<ExitStatus>,
     {
-        #[cfg(process_control_memory_limit)]
+        #[attr_alias(memory_limit)]
         {
             control = control.memory_limit(self.memory_limit);
         }

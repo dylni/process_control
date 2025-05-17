@@ -13,9 +13,10 @@ use super::WaitResult;
 mod pipe;
 pub(super) use pipe::Pipe;
 
+#[attr_alias::eval]
 #[derive(Debug)]
 struct Options {
-    #[cfg(process_control_memory_limit)]
+    #[attr_alias(memory_limit)]
     memory_limit: Option<usize>,
     time_limit: Option<Duration>,
     stdout_filter: Option<pipe::FilterWrapper>,
@@ -31,6 +32,7 @@ pub(super) trait Process {
     fn run_wait(&mut self, options: Options) -> WaitResult<Self::Result>;
 }
 
+#[attr_alias::eval]
 impl Process for &mut Child {
     type Result = ExitStatus;
 
@@ -38,7 +40,6 @@ impl Process for &mut Child {
         self
     }
 
-    #[allow(private_interfaces)]
     fn run_wait(&mut self, options: Options) -> WaitResult<Self::Result> {
         let result = self.try_wait();
         if let Ok(Some(exit_status)) = result {
@@ -46,7 +47,7 @@ impl Process for &mut Child {
         }
 
         let mut handle = imp::Process::new(self);
-        #[cfg(process_control_memory_limit)]
+        #[attr_alias(memory_limit)]
         if let Some(memory_limit) = options.memory_limit {
             handle.set_memory_limit(memory_limit)?;
         }
@@ -112,6 +113,7 @@ where
     terminate_for_timeout: bool,
 }
 
+#[attr_alias::eval]
 impl<P> Buffer<P>
 where
     P: Process,
@@ -120,7 +122,7 @@ where
         Self {
             process,
             options: Options {
-                #[cfg(process_control_memory_limit)]
+                #[attr_alias(memory_limit)]
                 memory_limit: None,
                 time_limit: None,
                 stdout_filter: None,
@@ -132,13 +134,14 @@ where
     }
 }
 
+#[attr_alias::eval]
 impl<P> Control for Buffer<P>
 where
     P: Process,
 {
     type Result = P::Result;
 
-    #[cfg(any(doc, process_control_memory_limit))]
+    #[attr_alias(memory_limit, cfg(any(doc, *)))]
     #[inline]
     fn memory_limit(mut self, limit: usize) -> Self {
         self.options.memory_limit = Some(limit);
