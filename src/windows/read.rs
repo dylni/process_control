@@ -102,7 +102,7 @@ impl DerefMut for Event {
 #[inline(always)]
 const fn u32_to_usize(n: u32) -> usize {
     // This assertion should never fail.
-    static_assert!(mem::size_of::<u32>() <= mem::size_of::<usize>());
+    static_assert!(size_of::<u32>() <= size_of::<usize>());
     n as usize
 }
 

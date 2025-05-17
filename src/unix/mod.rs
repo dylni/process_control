@@ -60,8 +60,6 @@ if_raw_pid! {
 }
 
 if_waitid! {
-    use std::mem;
-
     use libc::id_t;
 }
 
@@ -105,7 +103,7 @@ impl RawPid {
     #[attr_alias(unix_waitid)]
     const fn as_id(&self) -> id_t {
         static_assert!(pid_t::MAX == i32::MAX);
-        static_assert!(mem::size_of::<pid_t>() <= mem::size_of::<id_t>());
+        static_assert!(size_of::<pid_t>() <= size_of::<id_t>());
 
         self.0 as _
     }

@@ -1,6 +1,5 @@
 use std::io;
 use std::iter::FusedIterator;
-use std::mem;
 use std::num::NonZeroU32;
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::io::OwnedHandle;
@@ -69,7 +68,7 @@ fn check_syscall(result: BOOL) -> io::Result<()> {
 }
 
 const fn size_of_val_raw<T>(_: *const T) -> usize {
-    mem::size_of::<T>()
+    size_of::<T>()
 }
 
 #[derive(Debug)]
