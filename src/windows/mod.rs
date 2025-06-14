@@ -8,10 +8,11 @@ use std::ptr;
 use std::time::Duration;
 use std::time::Instant;
 
+use windows_sys::core::BOOL;
 use windows_sys::Win32::Foundation::CloseHandle;
-use windows_sys::Win32::Foundation::BOOL;
 use windows_sys::Win32::Foundation::ERROR_INVALID_PARAMETER;
 use windows_sys::Win32::Foundation::HANDLE;
+use windows_sys::Win32::Foundation::TRUE;
 use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
 use windows_sys::Win32::Foundation::WAIT_TIMEOUT;
 use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
@@ -53,7 +54,6 @@ macro_rules! assert_matches {
 pub(super) type OwnedFd = OwnedHandle;
 
 const EXIT_SUCCESS: u32 = 0;
-const TRUE: BOOL = 1;
 
 fn raw_os_error(error: &io::Error) -> Option<u32> {
     error.raw_os_error().and_then(|x| x.try_into().ok())
