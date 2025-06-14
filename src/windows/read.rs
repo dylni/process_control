@@ -26,11 +26,12 @@ use std::os::windows::io::FromRawHandle;
 use std::os::windows::io::OwnedHandle;
 use std::ptr;
 
-use windows_sys::Win32::Foundation::BOOL;
 use windows_sys::Win32::Foundation::ERROR_BROKEN_PIPE;
 use windows_sys::Win32::Foundation::ERROR_HANDLE_EOF;
 use windows_sys::Win32::Foundation::ERROR_IO_PENDING;
+use windows_sys::Win32::Foundation::FALSE;
 use windows_sys::Win32::Foundation::HANDLE;
+use windows_sys::Win32::Foundation::TRUE;
 use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
 use windows_sys::Win32::Storage::FileSystem::ReadFile;
 use windows_sys::Win32::System::Threading::CreateEventW;
@@ -48,9 +49,6 @@ macro_rules! static_assert {
         const _: () = assert!($condition, "static assertion failed");
     };
 }
-
-const FALSE: BOOL = 0;
-const TRUE: BOOL = 1;
 
 struct Event {
     inner: Box<OVERLAPPED>,
