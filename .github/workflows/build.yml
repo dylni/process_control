@@ -32,7 +32,7 @@ jobs:
     strategy:
       matrix:
         target: [x86_64-unknown-freebsd, x86_64-unknown-illumos]
-        version: [1.80.0, stable, beta, nightly]
+        version: [1.83.0, stable, beta, nightly]
   test:
     needs: [build]
     runs-on: ${{ matrix.platform }}
@@ -45,4 +45,4 @@ jobs:
     strategy:
       matrix:
         platform: [macos-latest, ubuntu-latest, windows-latest]
-        version: [1.80.0, stable, beta, nightly]
+        version: [1.83.0, stable, beta, nightly]
