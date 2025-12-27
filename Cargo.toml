@@ -27,7 +27,7 @@ libc = "0.2.120"
 
 [target.'cfg(all(unix, any(target_os = "espidf", target_os = "horizon", target_os = "openbsd", target_os = "redox", target_os = "tvos", target_os = "vxworks")))'.dependencies]
 parking_lot = { version = "0.12", optional = true }
-signal-hook = "0.3"
+signal-hook = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_IO", "Win32_System_Threading"] }
