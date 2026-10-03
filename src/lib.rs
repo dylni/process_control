@@ -556,7 +556,6 @@ pub trait ChildExt: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
-    #[must_use]
     fn controlled(&mut self) -> impl Control<Result = ExitStatus> + Debug;
 
     /// Creates an instance of [`Control`] that yields [`Output`] for this
@@ -591,7 +590,6 @@ pub trait ChildExt: private::Sealed {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
-    #[must_use]
     fn controlled_with_output(self) -> impl Control<Result = Output> + Debug;
 }
 
